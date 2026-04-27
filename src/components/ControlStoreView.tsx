@@ -97,7 +97,10 @@ function Row({
 
 export function ControlStoreView(): JSX.Element {
   const controlStore = useAppStore((s) => s.machine.controlStore);
-  const mpc = useAppStore((s) => s.machine.MPC);
+  // Track the just-executed microinstruction so the highlighted row matches
+  // the data-path animation. Before the first step `lastTrace` is null;
+  // fall back to MPC (which equals 0 / Main1 at boot).
+  const mpc = useAppStore((s) => s.lastTrace?.mpcBefore ?? s.machine.MPC);
   const breakpoints = useAppStore((s) => s.breakpoints);
   const toggleBreakpoint = useAppStore((s) => s.toggleBreakpoint);
 
@@ -126,7 +129,6 @@ export function ControlStoreView(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">Control Store</div>
       <div className={styles.headerRow}>
         <span className={styles.colSpacer} />
         <span className={styles.addrCol}>Addr</span>

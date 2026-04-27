@@ -57,8 +57,7 @@ export function MemoryView(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">
-        Memory
+      <div className={styles.miniToolbar}>
         <span className={styles.followControl}>
           follow:
           <select

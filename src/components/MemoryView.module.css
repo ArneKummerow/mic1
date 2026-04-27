@@ -65,11 +65,17 @@
   border-radius: 2px;
 }
 
+.miniToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+
 .followControl {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: normal;
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;

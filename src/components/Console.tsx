@@ -43,8 +43,7 @@ export function Console(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">
-        Console
+      <div className={styles.miniToolbar}>
         {waitingForInput && <span className={styles.waiting}>waiting for input…</span>}
         <button
           className={styles.clearBtn}

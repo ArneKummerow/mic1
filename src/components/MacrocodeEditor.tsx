@@ -11,7 +11,11 @@ export function MacrocodeEditor(): JSX.Element {
   const macrocode = useAppStore((s) => s.macrocode);
   const setMacrocode = useAppStore((s) => s.setMacrocode);
   const ijvmAssembly = useAppStore((s) => s.ijvmAssembly);
-  const currentPc = useAppStore((s) => s.machine.PC);
+  // Highlight the IJVM instruction whose handler is currently active. This is
+  // pinned at the address of the last opcode dispatched by Main1 — using
+  // `machine.PC` directly would mis-highlight mid-handler when PC walks past
+  // the operand bytes.
+  const currentPc = useAppStore((s) => s.currentOpcodeAddress);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -72,13 +76,12 @@ export function MacrocodeEditor(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">
-        Macrocode (IJVM)
-        {ijvmAssembly && ijvmAssembly.errors.length > 0 && (
-          <span className={styles.errorCount}>{ijvmAssembly.errors.length} error(s)</span>
-        )}
-      </div>
       <div className={styles.editorWrap}>
+        {ijvmAssembly && ijvmAssembly.errors.length > 0 && (
+          <span className={styles.errorBadge}>
+            {ijvmAssembly.errors.length} error{ijvmAssembly.errors.length === 1 ? '' : 's'}
+          </span>
+        )}
         <Editor
           language="ijvm"
           value={macrocode}

@@ -67,10 +67,6 @@ export function DataPathView(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">
-        Data Path
-        {turbo && <span className={styles.turboNote}>turbo mode — animations disabled</span>}
-      </div>
       <div className={styles.body}>
         <svg
           viewBox="0 0 900 380"

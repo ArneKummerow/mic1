@@ -50,6 +50,15 @@ export interface AppState {
   consoleOutput: string;
   consoleInput: string;
 
+  /**
+   * Byte address of the IJVM opcode whose handler is currently active.
+   * Updated whenever Main1 dispatches a new opcode (i.e. the just-executed
+   * microcycle had mpcBefore == 0 and mpcAfter != 0). Used by the macrocode
+   * editor to highlight the IJVM instruction being processed, rather than
+   * `PC` directly — `PC` ratchets forward mid-handler and would mis-highlight.
+   */
+  currentOpcodeAddress: number;
+
   // Reactivity counter — bump on every step so memory-view subscribers can
   // detect changes despite the Uint8Array reference being stable.
   tick: number;
@@ -97,6 +106,7 @@ export const useAppStore = create<AppState>()(
         errorMessage: null,
         consoleOutput: '',
         consoleInput: '',
+        currentOpcodeAddress: 0,
         tick: 0,
 
         setMicrocode: (text) => {
@@ -119,6 +129,7 @@ export const useAppStore = create<AppState>()(
             errorMessage: null,
             consoleOutput: '',
             consoleInput: '',
+            currentOpcodeAddress: fresh.machine.PC,
             tick: get().tick + 1,
           });
         },
@@ -139,11 +150,16 @@ export const useAppStore = create<AppState>()(
                   : get().mode === 'running'
                     ? 'running'
                     : 'paused';
+            // A Main1 dispatch (MPC 0 → opcode handler) means a new IJVM
+            // instruction is about to be processed; PC at this moment is the
+            // byte address of that opcode.
+            const dispatchedNew = trace.mpcBefore === 0 && trace.mpcAfter !== 0;
             set({
               machine: { ...machine },
               lastTrace: trace,
               mode: newMode,
               tick: get().tick + 1,
+              ...(dispatchedNew ? { currentOpcodeAddress: machine.PC } : {}),
               ...(machine.halted && machine.error ? { errorMessage: machine.error } : {}),
             });
           } catch (err) {

@@ -55,7 +55,6 @@ export function RegisterPanel(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">Registers</div>
       <div className={styles.body}>
         <div className={styles.mpcRow}>
           <span className={styles.mpcLabel}>MPC</span>

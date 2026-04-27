@@ -37,7 +37,9 @@ export function MicrocodeEditor(): JSX.Element {
   const microcode = useAppStore((s) => s.microcode);
   const setMicrocode = useAppStore((s) => s.setMicrocode);
   const microAssembly = useAppStore((s) => s.microAssembly);
-  const currentMpc = useAppStore((s) => s.machine.MPC);
+  // Highlight the microinstruction whose execution is shown in the data path
+  // (the just-executed cycle), falling back to MPC before the first step.
+  const currentMpc = useAppStore((s) => s.lastTrace?.mpcBefore ?? s.machine.MPC);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -101,13 +103,12 @@ export function MicrocodeEditor(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className="panel-header">
-        Microcode (MAL)
-        {microAssembly && microAssembly.errors.length > 0 && (
-          <span className={styles.errorCount}>{microAssembly.errors.length} error(s)</span>
-        )}
-      </div>
       <div className={styles.editorWrap}>
+        {microAssembly && microAssembly.errors.length > 0 && (
+          <span className={styles.errorBadge}>
+            {microAssembly.errors.length} error{microAssembly.errors.length === 1 ? '' : 's'}
+          </span>
+        )}
         <Editor
           language="mal"
           value={microcode}

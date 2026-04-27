@@ -1,3 +1,15 @@
+.miniToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+  flex-shrink: 0;
+  min-height: 28px;
+}
+
 .body {
   flex: 1;
   display: flex;
@@ -71,11 +83,9 @@
 }
 
 .waiting {
-  margin-left: 8px;
+  margin-right: auto;
   color: var(--accent);
   font-weight: 600;
-  text-transform: none;
-  letter-spacing: normal;
   font-size: 11px;
   animation: pulse 1.6s ease-in-out infinite;
 }
@@ -91,11 +101,9 @@
 }
 
 .clearBtn {
-  margin-left: auto;
   font-size: 10px;
   text-transform: lowercase;
   height: 20px;
   padding: 0 6px;
   font-weight: 400;
-  letter-spacing: normal;
 }
