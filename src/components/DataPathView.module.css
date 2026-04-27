@@ -1,0 +1,261 @@
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+  background: var(--bg-1);
+}
+
+.svg {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.bus {
+  stroke: var(--fg-3);
+  stroke-width: 2;
+  fill: none;
+  transition: stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease;
+  opacity: 0.55;
+}
+
+.cBus {
+  /* idle */
+}
+
+.bBus {
+  /* idle */
+}
+
+.aBus {
+  /* idle */
+}
+
+.busActive {
+  opacity: 1;
+  stroke-width: 3;
+}
+
+.cBus.busActive {
+  stroke: var(--bus-c);
+}
+
+.bBus.busActive {
+  stroke: var(--bus-b);
+}
+
+.aBus.busActive {
+  stroke: var(--bus-a);
+}
+
+.busLabel {
+  fill: var(--fg-3);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+}
+
+.tap {
+  stroke: var(--fg-3);
+  stroke-width: 1.5;
+  opacity: 0.4;
+  transition: opacity 200ms ease, stroke 200ms ease;
+}
+
+.cTap.tapActive {
+  stroke: var(--bus-c);
+  opacity: 1;
+}
+
+.bTap.tapActive {
+  stroke: var(--bus-b);
+  opacity: 1;
+}
+
+.regGroup {
+  cursor: default;
+}
+
+.reg {
+  fill: var(--bg-3);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  transition: fill 220ms ease, stroke 220ms ease;
+}
+
+.regWritten {
+  fill: color-mix(in srgb, var(--reg-flash) 25%, var(--bg-3));
+  stroke: var(--reg-flash);
+  stroke-width: 2;
+  animation: regFlash 600ms ease-out;
+}
+
+.regRead {
+  stroke: var(--bus-b);
+  stroke-width: 2;
+}
+
+@keyframes regFlash {
+  0% {
+    fill: color-mix(in srgb, var(--reg-flash) 60%, var(--bg-3));
+  }
+  100% {
+    fill: color-mix(in srgb, var(--reg-flash) 25%, var(--bg-3));
+  }
+}
+
+.regName {
+  fill: var(--fg-1);
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.regValue {
+  fill: var(--fg-2);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.alu {
+  fill: var(--bg-3);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  transition: fill 250ms ease, stroke 250ms ease;
+}
+
+.aluActive {
+  fill: color-mix(in srgb, var(--alu) 25%, var(--bg-3));
+  stroke: var(--alu);
+  stroke-width: 2;
+}
+
+.aluLabel {
+  fill: var(--fg-1);
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  font-family: ui-monospace, monospace;
+}
+
+.flagsLabel {
+  fill: var(--accent-2);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.shifter {
+  fill: var(--bg-3);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  transition: fill 250ms ease, stroke 250ms ease;
+}
+
+.shifterActive {
+  fill: color-mix(in srgb, var(--alu) 25%, var(--bg-3));
+  stroke: var(--alu);
+  stroke-width: 2;
+}
+
+.shifterLabel {
+  fill: var(--fg-1);
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+  font-family: ui-monospace, monospace;
+}
+
+.memBox {
+  fill: var(--bg-2);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.memLabel {
+  fill: var(--fg-1);
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.memOp {
+  fill: var(--fg-3);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  text-anchor: middle;
+  transition: fill 220ms ease;
+}
+
+.memOpActive {
+  font-weight: 700;
+}
+
+.memOp:nth-of-type(1).memOpActive {
+  fill: var(--mem-read);
+}
+.memOp:nth-of-type(2).memOpActive {
+  fill: var(--mem-write);
+}
+.memOp:nth-of-type(3).memOpActive {
+  fill: var(--mem-fetch);
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  font-size: 10px;
+  color: var(--fg-3);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legendDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.turboNote {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-2);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Disable transitions in turbo mode and respect reduced-motion preference. */
+.turbo .bus,
+.turbo .alu,
+.turbo .shifter,
+.turbo .reg,
+.turbo .tap,
+.turbo .memOp {
+  transition: none !important;
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bus,
+  .alu,
+  .shifter,
+  .reg,
+  .tap,
+  .memOp {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,0 +1,111 @@
+:root {
+  color-scheme: dark;
+
+  /* Backgrounds */
+  --bg-1: #0e1116;
+  --bg-2: #161b22;
+  --bg-3: #1f242c;
+  --border: #2a313a;
+
+  /* Foreground */
+  --fg-1: #e6edf3;
+  --fg-2: #9da7b0;
+  --fg-3: #6b7480;
+
+  /* Accents (Okabe-Ito-ish, colorblind-safe) */
+  --accent: #58a6ff;
+  --accent-2: #f0883e;
+  --bus-a: #cc79a7; /* magenta */
+  --bus-b: #56b4e9; /* cyan */
+  --bus-c: #94de4a; /* lime */
+  --alu: #e69f00; /* orange */
+  --mem-read: #009e73; /* green */
+  --mem-write: #d55e00; /* red-orange */
+  --mem-fetch: #0072b2; /* blue */
+  --reg-flash: #f0e442; /* yellow */
+  --error: #ff6b6b;
+  --halted: #8b95a3;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-1);
+  color: var(--fg-1);
+  overflow: hidden;
+}
+
+button {
+  background: var(--bg-3);
+  color: var(--fg-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--border);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+code,
+.mono {
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Monaco decoration classes — applied via createDecorationsCollection in
+   the editor components. Defined globally because Monaco renders them
+   into its own DOM tree outside any CSS Module scope. */
+.mic1-current-line {
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+}
+
+.mic1-current-glyph {
+  background: var(--accent);
+  width: 3px !important;
+  margin-left: 5px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-1);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}

@@ -1,0 +1,56 @@
+/*
+ * App-root layout: toolbar fixed at the top, Dockview fills the remainder.
+ * Dockview itself owns the panel arrangement (see components/Layout.tsx).
+ */
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*
+ * .panel is a generic "card" used by every dockable surface. Inside Dockview
+ * each panel renders a `<div className="panel">` whose flex column layout
+ * holds an optional in-panel header + body. Dockview's content container
+ * stretches to fill the tab group; .panel fills the content container.
+ */
+.panel {
+  background: var(--bg-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.panel-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.placeholder {
+  padding: 1.5rem;
+  color: var(--fg-2);
+  font-size: 13px;
+}

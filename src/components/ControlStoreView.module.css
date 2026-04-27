@@ -1,0 +1,96 @@
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+
+.headerRow > span {
+  flex: 0 0 auto;
+}
+
+.colSpacer { flex: 0 0 16px; }
+.addrCol   { flex: 0 0 50px; }
+.labelCol  { flex: 0 0 70px; }
+.aluCol    { flex: 1 1 auto; min-width: 70px; }
+.cBusCol   { flex: 0 0 70px; }
+.memCol    { flex: 0 0 50px; }
+.nextCol   { flex: 0 0 60px; }
+.jamCol    { flex: 0 0 80px; }
+
+.listContainer {
+  flex: 1 1 auto;
+  min-height: 200px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  border-bottom: 1px solid var(--bg-3);
+}
+
+.row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row .addr     { flex: 0 0 50px; color: var(--fg-2); }
+.row .label    { flex: 0 0 70px; color: var(--fg-2); font-style: italic; }
+.row .alu      { flex: 1 1 auto; min-width: 70px; color: var(--fg-1); }
+.row .cBus     { flex: 0 0 70px; color: var(--accent); }
+.row .mem      { flex: 0 0 50px; color: var(--mem-fetch); }
+.row .next     { flex: 0 0 60px; color: var(--fg-2); }
+.row .jam      { flex: 0 0 80px; color: var(--accent-2); }
+
+.currentRow {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.currentRow .addr {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.emptyRow {
+  opacity: 0.35;
+}
+
+.emptyRow .addr {
+  color: var(--fg-3);
+}
+
+.bpDot {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--fg-3);
+  background: transparent;
+  padding: 0;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.bpDot:hover {
+  border-color: var(--error);
+}
+
+.bpActive {
+  background: var(--error);
+  border-color: var(--error);
+}

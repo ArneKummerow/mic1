@@ -1,0 +1,149 @@
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.gridSection {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 6px 10px;
+  border-right: 1px solid var(--border);
+}
+
+.gridHeader,
+.gridRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.gridHeader {
+  font-weight: 700;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--bg-3);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.gridRow {
+  padding: 1px 0;
+}
+
+.addrCol {
+  flex: 0 0 40px;
+  color: var(--fg-3);
+}
+
+.byteCol {
+  flex: 0 0 18px;
+  text-align: center;
+  color: var(--fg-1);
+}
+
+.gridHeader .byteCol {
+  color: var(--fg-3);
+}
+
+.asciiCol {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  color: var(--fg-2);
+  letter-spacing: 1px;
+}
+
+.pcByte {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--bg-1);
+  border-radius: 2px;
+}
+
+.marByte {
+  background: color-mix(in srgb, var(--mem-fetch) 25%, transparent);
+  border-radius: 2px;
+}
+
+.followControl {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-2);
+}
+
+.followSelect {
+  background: var(--bg-3);
+  color: var(--fg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.fixedInput {
+  background: var(--bg-3);
+  color: var(--fg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+  width: 80px;
+}
+
+.stackSection {
+  flex: 0 0 180px;
+  overflow: auto;
+  padding: 6px 10px;
+  background: var(--bg-1);
+}
+
+.stackHeader {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+  margin-bottom: 6px;
+}
+
+.stackList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stackRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  padding: 1px 0;
+}
+
+.stackAddr {
+  color: var(--fg-3);
+}
+
+.stackValue {
+  color: var(--fg-1);
+  font-weight: 500;
+  flex: 1;
+  text-align: right;
+}
+
+.stackTag {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}

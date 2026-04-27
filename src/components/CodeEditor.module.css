@@ -1,0 +1,14 @@
+.editorWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.errorCount {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--error);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 11px;
+}
