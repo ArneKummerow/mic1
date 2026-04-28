@@ -21,12 +21,9 @@ import styles from './DataPathView.module.css';
 
 // Geometry --------------------------------------------------------------
 
-const W = 460;
-const H_CANVAS = 620;
-
 const REG_X = 160;
 const REG_W = 160;
-const REG_H = 32;
+const REG_H = 26;
 const REG_GAP = 6;
 
 // MEM "register" at the very top, separated from MAR by extra space.
@@ -38,9 +35,10 @@ const MEM_TO_REG_GAP = 16;
 
 const REG_FIRST_Y = MEM_BOX_Y + MEM_BOX_H + MEM_TO_REG_GAP;
 
-const C_BUS_X = 80;
-const B_BUS_X = 400;
-const BUS_TOP_Y = REG_FIRST_Y - 10;
+const C_BUS_X = 133;
+const B_BUS_X = 347;
+// Ends exactly at MAR's tap — no dead-end above the topmost register.
+const BUS_TOP_Y = REG_FIRST_Y + REG_H / 2;
 
 const REGISTER_LAYOUT: { name: RegisterName; y: number; cBusWritable: boolean }[] = [
   { name: 'MAR', y: REG_FIRST_Y + 0 * (REG_H + REG_GAP), cBusWritable: true },
@@ -75,6 +73,14 @@ const BUS_BOTTOM_Y = SHIFTER_BOTTOM_Y + 16;
 const A_BUS_X = 200; // wire from H bottom down into ALU's A-input
 const B_BUS_TO_ALU_X = 295; // wire from B-bus elbow into ALU's B-input
 const B_BUS_ELBOW_Y = ALU_Y - 14;
+
+// Crop the viewBox to actual content bounds — removes the large empty horizontal
+// margins so the schematic fills the panel rather than floating in blank canvas.
+const VIEW_X = C_BUS_X - 14;
+const VIEW_Y = 8;
+const VIEW_RIGHT = Math.max(B_BUS_X + 14, ALU_X + ALU_W + 40); // rightmost: bus or flags label
+const VIEW_W = VIEW_RIGHT - VIEW_X;
+const VIEW_H = BUS_BOTTOM_Y + 12 - VIEW_Y; // 12 px bottom margin; tracks content height
 
 // C-bus path: shifter bottom → down → left along the bottom → up the left side.
 const C_BUS_PATH = `
@@ -147,7 +153,7 @@ export function DataPathView(): JSX.Element {
     <div className="panel">
       <div className={styles.body}>
         <svg
-          viewBox={`0 0 ${W} ${H_CANVAS}`}
+          viewBox={`${VIEW_X} ${VIEW_Y} ${VIEW_W} ${VIEW_H}`}
           xmlns="http://www.w3.org/2000/svg"
           className={`${styles.svg} ${turbo ? styles.turbo : ''}`}
           aria-label="MIC-1 data path"
@@ -158,7 +164,7 @@ export function DataPathView(): JSX.Element {
             d={C_BUS_PATH}
             className={`${styles.bus} ${styles.cBus} ${highlight.cBusActive ? styles.busActive : ''}`}
           />
-          <text x={C_BUS_X - 12} y={BUS_TOP_Y + 8} className={styles.busLabel}>
+          <text x={C_BUS_X} y={REG_FIRST_Y - 4} className={styles.busLabel} textAnchor="middle" style={{ fill: 'var(--bus-c)' }}>
             C
           </text>
 
@@ -167,7 +173,7 @@ export function DataPathView(): JSX.Element {
             d={B_BUS_PATH}
             className={`${styles.bus} ${styles.bBus} ${highlight.bBusActive ? styles.busActive : ''}`}
           />
-          <text x={B_BUS_X + 6} y={BUS_TOP_Y + 8} className={styles.busLabel}>
+          <text x={B_BUS_X} y={REG_FIRST_Y - 4} className={styles.busLabel} textAnchor="middle" style={{ fill: 'var(--bus-b)' }}>
             B
           </text>
 
@@ -184,28 +190,28 @@ export function DataPathView(): JSX.Element {
             />
             <text
               x={MEM_BOX_X + 12}
-              y={MEM_BOX_Y + MEM_BOX_H / 2 + 4}
+              y={MEM_BOX_Y + MEM_BOX_H / 2}
               className={styles.regName}
             >
               MEM
             </text>
             <text
               x={MEM_BOX_X + 56}
-              y={MEM_BOX_Y + MEM_BOX_H / 2 + 4}
+              y={MEM_BOX_Y + MEM_BOX_H / 2}
               className={`${styles.memOp} ${highlight.memRead ? styles.memOpReadActive : ''}`}
             >
               rd
             </text>
             <text
               x={MEM_BOX_X + 78}
-              y={MEM_BOX_Y + MEM_BOX_H / 2 + 4}
+              y={MEM_BOX_Y + MEM_BOX_H / 2}
               className={`${styles.memOp} ${highlight.memWrite ? styles.memOpWriteActive : ''}`}
             >
               wr
             </text>
             <text
               x={MEM_BOX_X + 100}
-              y={MEM_BOX_Y + MEM_BOX_H / 2 + 4}
+              y={MEM_BOX_Y + MEM_BOX_H / 2}
               className={`${styles.memOp} ${highlight.memFetch ? styles.memOpFetchActive : ''}`}
             >
               fetch
@@ -250,10 +256,10 @@ export function DataPathView(): JSX.Element {
                   rx={3}
                   className={`${styles.reg} ${isWritten ? styles.regWritten : ''} ${isBSource || isAH ? styles.regRead : ''}`}
                 />
-                <text x={REG_X + 12} y={cy + 4} className={styles.regName}>
+                <text x={REG_X + 12} y={cy} className={styles.regName}>
                   {name}
                 </text>
-                <text x={REG_X + REG_W - 8} y={cy + 4} className={styles.regValue}>
+                <text x={REG_X + REG_W - 8} y={cy} className={styles.regValue}>
                   {fmtVal(machine[name], name)}
                 </text>
               </g>
@@ -268,7 +274,7 @@ export function DataPathView(): JSX.Element {
             y2={ALU_Y}
             className={`${styles.bus} ${styles.aBus} ${highlight.aActive ? styles.busActive : ''}`}
           />
-          <text x={A_BUS_X - 14} y={(H_BOTTOM_Y + ALU_Y) / 2 + 4} className={styles.busLabel}>
+          <text x={A_BUS_X - 14} y={(H_BOTTOM_Y + ALU_Y) / 2 + 4} className={styles.busLabel} style={{ fill: 'var(--bus-a)' }}>
             A
           </text>
 
@@ -290,9 +296,14 @@ export function DataPathView(): JSX.Element {
             </text>
           )}
           {lastTrace && (
-            <text x={ALU_X + ALU_W + 10} y={ALU_Y + 16} className={styles.flagsLabel}>
-              N={lastTrace.aluFlags.N ? 1 : 0} Z={lastTrace.aluFlags.Z ? 1 : 0}
-            </text>
+            <>
+              <text x={ALU_X + ALU_W + 10} y={ALU_Y + 14} className={styles.flagsLabel}>
+                N={lastTrace.aluFlags.N ? 1 : 0}
+              </text>
+              <text x={ALU_X + ALU_W + 10} y={ALU_Y + 28} className={styles.flagsLabel}>
+                Z={lastTrace.aluFlags.Z ? 1 : 0}
+              </text>
+            </>
           )}
 
           {/* ALU → Shifter */}
