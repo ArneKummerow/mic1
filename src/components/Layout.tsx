@@ -12,6 +12,7 @@ import { MicrocodeEditor } from './MicrocodeEditor';
 import { MacrocodeEditor } from './MacrocodeEditor';
 import { DataPathView } from './DataPathView';
 import { MemoryView } from './MemoryView';
+import { StackView } from './StackView';
 import { RegisterPanel } from './RegisterPanel';
 import { ControlStoreView } from './ControlStoreView';
 import { Console } from './Console';
@@ -30,6 +31,7 @@ const components = {
   macrocode: () => <MacrocodeEditor />,
   dataPath: () => <DataPathView />,
   memory: () => <MemoryView />,
+  stack: () => <StackView />,
   registers: () => <RegisterPanel />,
   controlStore: () => <ControlStoreView />,
   console: () => <Console />,

@@ -1,0 +1,69 @@
+.body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--bg-3);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.addr {
+  color: var(--fg-3);
+  flex: 0 0 auto;
+}
+
+.value {
+  color: var(--fg-1);
+  font-weight: 500;
+  flex: 1;
+  text-align: right;
+}
+
+.tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+  min-width: 30px;
+  text-align: center;
+}
+
+.tosRow {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.tosRow .tag {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.lvRow {
+  background: color-mix(in srgb, var(--bus-c) 12%, transparent);
+}
+
+.lvRow .tag {
+  color: var(--bus-c);
+  background: color-mix(in srgb, var(--bus-c) 25%, transparent);
+}
+
+.empty {
+  color: var(--fg-3);
+  font-style: italic;
+  padding: 1rem;
+  text-align: center;
+}

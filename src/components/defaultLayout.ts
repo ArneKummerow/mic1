@@ -69,11 +69,18 @@ export function applyDefaultLayout(api: DockviewApi): void {
     position: { referencePanel: 'registers', direction: 'right' },
   });
 
-  // 5. Memory as a tab in the Control Store group.
+  // 5. Memory and Stack as additional tabs in the Control Store group.
   api.addPanel({
     id: 'memory',
     component: 'memory',
     title: 'Memory',
+    position: { referencePanel: 'controlStore', direction: 'within' },
+    inactive: true,
+  });
+  api.addPanel({
+    id: 'stack',
+    component: 'stack',
+    title: 'Stack',
     position: { referencePanel: 'controlStore', direction: 'within' },
     inactive: true,
   });

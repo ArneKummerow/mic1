@@ -14,17 +14,6 @@ function fmtHex(n: number, width: number): string {
     .toUpperCase();
 }
 
-function readWord(memory: Uint8Array, byteAddr: number): number {
-  if (byteAddr < 0 || byteAddr + 3 >= memory.length) return 0;
-  return (
-    ((memory[byteAddr] << 24) |
-      (memory[byteAddr + 1] << 16) |
-      (memory[byteAddr + 2] << 8) |
-      memory[byteAddr + 3]) |
-    0
-  );
-}
-
 export function MemoryView(): JSX.Element {
   const machine = useAppStore((s) => s.machine);
   // Subscribe to tick so the byte cells update when memory mutates (the
@@ -130,38 +119,7 @@ export function MemoryView(): JSX.Element {
             );
           })}
         </div>
-
-        <div className={styles.stackSection}>
-          <div className={styles.stackHeader}>Operand stack</div>
-          <StackList machine={machine} />
-        </div>
       </div>
-    </div>
-  );
-}
-
-function StackList({ machine }: { machine: ReturnType<typeof useAppStore.getState>['machine'] }): JSX.Element {
-  const sp = machine.SP;
-  const lv = machine.LV;
-  // Show up to 12 words from SP downward.
-  const wordsToShow = 12;
-  const rows: { wordAddr: number; value: number; tag: string }[] = [];
-  for (let i = 0; i < wordsToShow; i++) {
-    const w = sp - i;
-    if (w < 0) break;
-    const tag = w === sp ? 'TOS' : w === lv ? 'LV' : '';
-    const value = w === sp ? machine.TOS : readWord(machine.memory, w * 4);
-    rows.push({ wordAddr: w, value, tag });
-  }
-  return (
-    <div className={styles.stackList}>
-      {rows.map(({ wordAddr, value, tag }) => (
-        <div key={wordAddr} className={styles.stackRow}>
-          <span className={`mono ${styles.stackAddr}`}>[{fmtHex(wordAddr, 4)}]</span>
-          <span className={`mono ${styles.stackValue}`}>{(value | 0).toString()}</span>
-          {tag && <span className={styles.stackTag}>{tag}</span>}
-        </div>
-      ))}
     </div>
   );
 }

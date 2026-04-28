@@ -13,10 +13,6 @@
   flex-shrink: 0;
 }
 
-.headerRow > span {
-  flex: 0 0 auto;
-}
-
 .colSpacer { flex: 0 0 16px; }
 .addrCol   { flex: 0 0 50px; }
 .labelCol  { flex: 0 0 70px; }

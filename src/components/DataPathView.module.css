@@ -111,15 +111,15 @@
   fill: var(--fg-1);
   font-size: 11px;
   font-weight: 700;
-  text-anchor: middle;
+  text-anchor: start;
   dominant-baseline: middle;
 }
 
 .regValue {
   fill: var(--fg-2);
   font-family: ui-monospace, monospace;
-  font-size: 9px;
-  text-anchor: middle;
+  font-size: 10px;
+  text-anchor: end;
   dominant-baseline: middle;
 }
 
@@ -140,6 +140,13 @@
   fill: var(--fg-1);
   font-size: 13px;
   font-weight: 700;
+  text-anchor: middle;
+  font-family: ui-monospace, monospace;
+}
+
+.aluValueLabel {
+  fill: var(--fg-2);
+  font-size: 10px;
   text-anchor: middle;
   font-family: ui-monospace, monospace;
 }
@@ -171,71 +178,36 @@
   font-family: ui-monospace, monospace;
 }
 
-.memBox {
-  fill: var(--bg-2);
-  stroke: var(--border);
-  stroke-width: 1.5;
-}
-
-.memLabel {
-  fill: var(--fg-1);
-  font-size: 11px;
-  font-weight: 700;
+.shifterValueLabel {
+  fill: var(--fg-2);
+  font-size: 9px;
   text-anchor: middle;
+  font-family: ui-monospace, monospace;
 }
 
 .memOp {
   fill: var(--fg-3);
   font-family: ui-monospace, monospace;
   font-size: 11px;
-  text-anchor: middle;
+  text-anchor: start;
   transition: fill 220ms ease;
 }
 
-.memOpActive {
+.memOpReadActive {
+  fill: var(--mem-read);
   font-weight: 700;
 }
 
-.memOp:nth-of-type(1).memOpActive {
-  fill: var(--mem-read);
-}
-.memOp:nth-of-type(2).memOpActive {
+.memOpWriteActive {
   fill: var(--mem-write);
+  font-weight: 700;
 }
-.memOp:nth-of-type(3).memOpActive {
+
+.memOpFetchActive {
   fill: var(--mem-fetch);
+  font-weight: 700;
 }
 
-.legend {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 8px;
-  font-size: 10px;
-  color: var(--fg-3);
-}
-
-.legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.legendDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.turboNote {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent-2);
-  text-transform: none;
-  letter-spacing: normal;
-}
 
 /* Disable transitions in turbo mode and respect reduced-motion preference. */
 .turbo .bus,

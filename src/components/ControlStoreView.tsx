@@ -107,6 +107,14 @@ export function ControlStoreView(): JSX.Element {
   const listRef = useRef<FixedSizeList<RowData>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [sbWidth] = useState(() => {
+    const div = document.createElement('div');
+    div.style.cssText = 'overflow-y:scroll;position:fixed;top:-9999px;width:50px;height:50px';
+    document.body.appendChild(div);
+    const w = div.offsetWidth - div.clientWidth;
+    document.body.removeChild(div);
+    return w;
+  });
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -129,7 +137,7 @@ export function ControlStoreView(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className={styles.headerRow}>
+      <div className={styles.headerRow} style={{ paddingRight: 6 + sbWidth }}>
         <span className={styles.colSpacer} />
         <span className={styles.addrCol}>Addr</span>
         <span className={styles.labelCol}>Label</span>
