@@ -1,40 +1,179 @@
 # TODO
 
-Build order for the MIC-1 Visualizer. Roughly dependency-ordered: engine → store → UI → polish. Check items off as you go.
+Tracks the gaps between what the simulator currently supports and a "complete"
+MIC-1 / IJVM teaching environment matching Tanenbaum's *Structured Computer
+Organization*.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design these refer to.
+## IJVM assembler — directive support
 
-## Setup
+The IJVM assembler in [src/engine/ijvm/assembler.ts](src/engine/ijvm/assembler.ts)
+is currently mnemonics-and-labels only. The directives below are claimed by
+[docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md) but not implemented; without
+them, `INVOKEVIRTUAL`/`IRETURN` / `LDC_W` / `WIDE` cannot be exercised
+naturally in source.
 
-- [x] **Install npm dependencies and verify the dev server boots.** `npm install && npm run dev` — placeholder app should appear at http://localhost:5173.
+- [ ] **`.method name(arg, arg, ...)` … `.end-method`.** Lays out the 4-byte
+  method prologue (2-byte arg count, 2-byte locals count) at the method's
+  starting offset; binds `name` to a constant-pool entry whose value is the
+  byte offset of the first prologue byte. Method entry semantics matching
+  Tanenbaum's INVOKEVIRTUAL: caller pushes OBJREF + args; callee's LV is
+  set to the OBJREF slot.
+- [ ] **`.var <name>`.** Inside a `.method`, declares a named local variable.
+  Resolves to a `ubyte` index for `ILOAD`/`ISTORE`/`IINC` (or `uword` after
+  `WIDE`). Indices auto-assigned starting after the implicit `this` slot
+  (LV[0] = OBJREF) and the declared `.args`.
+- [ ] **`.args <n>`.** Number of arguments (including OBJREF) the method
+  consumes from the operand stack. Validates against the count declared in
+  the `.method` header; informs the prologue's "args" field.
+- [ ] **`.const <name> <value>` / `.constant`.** Defines a 32-bit constant
+  pool entry; binds `name` to its 16-bit unsigned index (suitable for
+  `LDC_W` / `INVOKEVIRTUAL`). Both spellings should be accepted — the
+  textbook uses `.constant`, the docs already mention both.
+- [ ] **Constant pool / method area memory layout.** Currently the assembler
+  emits one flat byte stream and bootstrap copies it to memory[0..N]. With
+  directives, output needs three regions (method bytes, constant-pool
+  words, optional initial LV frame) plus the addresses each is loaded at;
+  bootstrap should set CPP / LV / PC accordingly.
+- [ ] **Validation.** `BIPUSH` operand range, `ILOAD`/`ISTORE` against
+  `.var` count, `INVOKEVIRTUAL` against `.method` arg count, branch offsets
+  to undeclared labels, etc. Most of these need the directive infrastructure
+  before they're meaningful.
 
-## Engine (pure TypeScript, no React)
+## Microcode — deferred IJVM opcodes
 
-- [x] **Core types and `step()` simulator.** Define `MachineState`, `Microinstruction`, `MicroTrace` in [src/engine/types.ts](src/engine/types.ts). Implement `step(state) → {state, trace}` as a pure function in `src/engine/simulator.ts`. Golden tests for ALU op selection, JAM logic, memory ops, MPC update.
-- [x] **MAL (microcode) assembler.** Lexer + parser + encoder under `src/engine/mal/`. Accepts the MAL syntax from [docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md#mal-syntax-the-assembler-accepts). Returns `{controlStore, errors, sourceMap}`. Round-trip tests where possible.
-- [x] **IJVM assembler.** Lexer + parser + encoder under `src/engine/ijvm/`. Handles opcodes, labels, `.method` / `.var` / `.args` / `.const` directives. Returns `{bytes, errors, symbolTable, sourceMap}`.
-- [x] **Default microprogram + sample IJVM program.** Bundle the textbook microprogram (in MAL) and a small sample IJVM program (e.g. fibonacci, hello-world) as the preloaded source. Add an end-to-end integration test: assemble both, run on the simulator, assert final register / memory / output.
+These sit unimplemented in
+[src/engine/defaultMicrocode.ts](src/engine/defaultMicrocode.ts). The
+microcode itself is straightforward (mostly Tanenbaum Fig. 4-17 with
+the usual 1-cycle-fetch-delay adaptation), but most need the assembler
+directives above before they can be exercised.
 
-## Store
+- [ ] **`INVOKEVIRTUAL` (0xB6).** ~21 microinstructions. Resolves a 16-bit
+  constant-pool index to a method address, reads num-args/num-locals from
+  the prologue, pushes the link pointer (return PC + saved LV) under the
+  args, sets new LV/PC, falls into `Main1` with the new method's first
+  opcode pre-fetched.
+- [ ] **`IRETURN` (0xAC).** ~8 microinstructions. Pops return value, walks
+  the link pointer to restore caller's PC and LV, places return value at
+  caller's new TOS, dispatches.
+- [ ] **`WIDE` (0xC4).** ~1 dispatch microinstruction:
+  `PC = PC + 1; fetch; goto (MBR OR 0x100)`. Then "wide" variants of
+  `ILOAD` / `ISTORE` / `IINC` at the 0x115 / 0x136 / 0x184 entries that
+  read a 16-bit index across two operand bytes instead of one.
+- [ ] **`IN` (0xFC).** Read a byte from the console input buffer; push 0 if
+  the buffer is empty (or stall — see simulator section). Needs memory-
+  mapped I/O wiring on the simulator side.
+- [ ] **`OUT` (0xFD).** Pop a byte and append it to the console output
+  buffer. Same I/O wiring.
 
-- [x] **Zustand store and run-loop.** Slices: `machine`, `sources` (persisted to localStorage, debounced), `assembled` (derived), `execution` (`paused | running | waiting-for-input | halted | error`, speed, breakpoints, lastTrace), `console`. Implement microstep / macrostep / run-at-speed. Pause on breakpoint, halt, or error.
+## Simulator — I/O and other gaps
 
-## UI
+- [ ] **Memory-mapped console I/O.** Pick reserved word addresses (e.g.
+  `0xFFFFFFFC` for input, `0xFFFFFFFE` for output) and special-case them
+  in `completePendingMemoryOps` ([src/engine/simulator.ts](src/engine/simulator.ts))
+  to drain `consoleInput` / append to `consoleOutput` instead of reading /
+  writing main memory. Wire the store so the simulator can call back into
+  it when `IN` / `OUT` execute.
+- [ ] **`waiting-for-input` mode is declared but never entered.** The
+  store has `'waiting-for-input'` as an `ExecutionMode` and the Console
+  shows "waiting for input…" when active, but nothing transitions into
+  it. When `IN` reads from an empty buffer, microstep should pause the
+  run-loop and resume on the next `appendConsoleInput`.
+- [ ] **Step-back / undo.** Listed under "Stretch" in the previous TODO —
+  ring-buffer of `MachineState` snapshots so the user can rewind one
+  micro-cycle (or one macro-instruction) at a time. `snapshotMachineState`
+  already exists in [src/engine/simulator.ts](src/engine/simulator.ts).
 
-- [x] **App shell, toolbar, keyboard shortcuts.** Three-row layout (Toolbar / code+datapath+registers / macrocode+memory+console) per [docs/UI_DESIGN.md](docs/UI_DESIGN.md). Toolbar: run/pause, µstep, macro-step, reset, speed slider, status pill, settings, help. Keymap: F5, F10, F11, Shift+F5, Ctrl+S, Ctrl+B.
-- [x] **Register panel, Memory view, Control Store view.** Register panel always visible with most-recently-written highlight. Memory view: hex grid + region overlays (method area / constant pool / LV frame / operand stack) + separate stack-as-list panel. Control store: virtualized table (`react-window`) with current-MPC auto-scroll.
-- [x] **Monaco MAL and IJVM editors.** Custom language definitions (Monarch tokens). Gutter shows assembled µaddress / IJVM byte address. Yellow arrow tracks current MPC / PC. Red squiggles for assembler errors with click-to-jump. Format button for column-aligned MAL.
-- [x] **Console panel.** Append-only output buffer fed by IJVM `OUT`. Input field; on `IN` with empty buffer, simulator pauses with a "waiting for input" indicator until the user types + Enter.
-- [x] **Data Path SVG + trace-driven animation.** Hand-authored SVG of the MIC-1 data path (registers, A/B/C buses, ALU, shifter, memory interface). Animation driven by `lastTrace`: B-source highlight → ALU glow → C-bus fill → register flash. Turbo-mode (>200 µsteps/s) replaces animation with instantaneous flash. Respect `prefers-reduced-motion`.
+## Default microcode / macrocode samples
 
-## Polish
+- [ ] **Recursive factorial or Fibonacci sample** using
+  `INVOKEVIRTUAL` / `IRETURN` once the directive + microcode work above
+  lands. This is the most useful pedagogical exercise of the call mechanism.
+- [ ] **Echo / hello-world sample** once `IN` / `OUT` work — read bytes
+  until newline, push, OUT-loop them.
+- [ ] **`WIDE` example** — a method with > 256 locals, or a constant pool
+  reference > 0xFF, demonstrating the wide-prefix dispatch.
 
-- [x] **Persistence, breakpoints, banners, accessibility, URL sharing.** localStorage autosave for sources (debounced). Breakpoints in microcode + macrocode editors (toggle in gutter, persisted). Halt / assembler-error / illegal-instruction banners with "click to jump to offending line". Colorblind-safe palette verified. Shareable URL hash with LZ-compressed source.
+## MAL editor — missing features in [src/components/MicrocodeEditor.tsx](src/components/MicrocodeEditor.tsx)
 
-## Stretch (post-v1)
+The previous TODO marked these "done" but on inspection the wiring isn't
+actually present:
 
-- [ ] Step-back via ring-buffer of `MachineState` snapshots.
-- [ ] Import / export `.mal` and `.ijvm` files (File System Access API with download/upload fallback).
-- [ ] Light theme.
-- [ ] PWA / service worker for offline use.
-- [ ] MIC-2 / MIC-3 / MIC-4 variants.
+- [ ] **Gutter shows assembled µaddress per line.** The previous TODO
+  promised "Gutter shows assembled µaddress / IJVM byte address" but the
+  current editor only shows Monaco's stock line numbers. Use a custom
+  zone or glyph margin populated from `microAssembly.addressByLine`.
+- [ ] **Breakpoint toggle in the editor gutter.** The store has
+  `breakpoints` / `toggleBreakpoint`, the [ControlStoreView](src/components/ControlStoreView.tsx)
+  uses them, and `glyphMargin: true` is set on the MAL editor — but no
+  click handler is registered, so users can't add breakpoints from the
+  source view. Add `editor.onMouseDown` on the glyph-margin column;
+  translate the source line to a microaddress via `addressByLine` and
+  call `toggleBreakpoint`. Render existing breakpoints as a glyph.
+- [ ] **Format button for column-aligned MAL.** Promised in the original
+  TODO; not implemented. Walk parsed lines, compute column widths for
+  label / assignments / mem-ops / goto, re-emit with whitespace padding.
+- [ ] **Hover info on registers, opcodes, ALU operations.** A
+  `monaco.languages.registerHoverProvider` for `mal` that, given a token,
+  returns the corresponding row from
+  [docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md) (register description,
+  ALU truth-table function, etc.).
+- [ ] **Autocomplete / IntelliSense.** Register names, mem-op keywords
+  (`rd` / `wr` / `fetch`), goto targets pulled from `microAssembly.labels`,
+  common patterns (`MAR = SP = SP - 1; rd`).
+- [ ] **Snippets.** Common handler skeletons (`opcodeN  ; goto opcodeN+1`),
+  pop-and-test prologue, conditional-branch scaffold (since the bit-8
+  layout is non-obvious).
+- [ ] **Click-to-jump from assembler error to source.** Already partly
+  works because errors are emitted as Monaco markers, but a dedicated
+  errors panel that lists them and jumps on click would be friendlier.
+
+## MAL parser / encoder — missing language features
+
+- [ ] **Two-label conditional `if (Z) goto T; else goto F`.** Tanenbaum's
+  textbook MAL uses this form; the current parser only accepts a single
+  target. The two-label form lets the assembler validate `T = F | 0x100`
+  (the bit-8 invariant) explicitly rather than relying on convention.
+  See [src/engine/mal/parser.ts](src/engine/mal/parser.ts) (parseIfStatement)
+  and [src/engine/mal/encoder.ts](src/engine/mal/encoder.ts).
+- [ ] **Negated conditions (`if (~N)` / `if (!Z)`).** Useful for handlers
+  whose taken-branch is the *less* common case.
+- [ ] **Better diagnostics for unsupported ALU expressions.** The encoder
+  currently rejects e.g. `H - 1` with a plain "not expressible" error.
+  Suggest the equivalent supported form (`-1 + H`, etc.) where possible.
+- [ ] **Round-trip tests.** Disassemble an encoded `Microinstruction`
+  back to MAL, re-assemble, assert byte-equivalence — catches encoder
+  bugs the current expression-shape tests miss.
+
+## IJVM editor — missing features in [src/components/MacrocodeEditor.tsx](src/components/MacrocodeEditor.tsx)
+
+- [ ] **Gutter shows IJVM byte address per line** — symmetric with the MAL
+  gutter request above, populated from `ijvmAssembly.addressByLine`.
+- [ ] **Breakpoint toggle in gutter.** Same gap as the MAL editor — UI is
+  not wired.
+- [ ] **Hover info on opcodes.** Show the operand kinds, byte length, and
+  effect from [src/engine/ijvm/opcodes.ts](src/engine/ijvm/opcodes.ts).
+- [ ] **Autocomplete for opcodes, labels, `.var` / `.method` / `.const`
+  names** (after the directive work above).
+- [ ] **Goto-definition / find-references for labels and (later) methods,
+  vars, constants.**
+- [ ] **Operand-range / undefined-label errors highlighted as squiggles**
+  with click-to-jump to declaration when the directive infrastructure
+  exists.
+
+## Polish / stretch
+
+- [ ] **Import / export `.mal` and `.ijvm` files** (File System Access API
+  with download/upload fallback). Listed as stretch in the previous TODO.
+- [ ] **Light theme.**
+- [ ] **PWA / service-worker offline mode.**
+- [ ] **MIC-2 / MIC-3 / MIC-4 variants** — instruction prefetch, scoreboarding,
+  pipelining. A natural extension once MIC-1 is feature-complete.
+
+## Documentation
+
+- [ ] **Update [docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md)** as each
+  IJVM assembler directive lands, so the "assembler accepts" section
+  matches reality. Currently it overstates support.
+- [ ] **Tutorial / walkthrough** for new students: trace one IJVM
+  instruction end-to-end through Main1 → handler → memory → datapath.
+  Could live as a Markdown page or as guided tooltips inside the app.

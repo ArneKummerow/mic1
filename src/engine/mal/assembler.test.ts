@@ -163,6 +163,10 @@ describe('MAL assembler: labels and goto', () => {
   });
 
   it('handles if (N) goto Label', () => {
+    // The taken-branch label (L2) must live in the upper half so the JAM
+    // mechanism (which only OR's bit 8) can reach it. NEXT_ADDR stores the
+    // fall-through address (L2 & 0xFF); the fall-through microinstruction
+    // is the user's responsibility to place at that low-half address.
     const src = `
       L1 = 0x010   H = MDR; if (N) goto L2
       L2 = 0x110   MDR = H
@@ -170,7 +174,50 @@ describe('MAL assembler: labels and goto', () => {
     const r = assembleMicrocode(src);
     expectNoErrors(r);
     expect(r.controlStore[0x10]!.jam.JAMN).toBe(true);
-    expect(r.controlStore[0x10]!.nextAddress).toBe(0x110);
+    expect(r.controlStore[0x10]!.nextAddress).toBe(0x10);
+  });
+
+  it('rejects conditional if-goto whose target is in the lower half', () => {
+    const src = `
+      L1 = 0x010   H = MDR; if (Z) goto L2
+      L2 = 0x050   MDR = H
+    `;
+    const r = assembleMicrocode(src);
+    expect(r.errors.some((e) => /must be in 0x100..0x1ff/i.test(e.message))).toBe(true);
+  });
+
+  it('runs an if (Z) goto T branch correctly in the simulator', () => {
+    // Verify the JAM bit-8 mechanism actually picks the right path: when Z
+    // is true at the if-microinstruction, MPC should land at T; when false,
+    // at the fall-through F (= T & 0xFF).
+    const src = `
+      Start = 0x000   H = MDR; if (Z) goto Taken
+      Fall  = 0x001   goto Fall
+      Taken = 0x101   goto Taken
+    `;
+    const r = assembleMicrocode(src);
+    expectNoErrors(r);
+
+    // Z-true: MDR = 0 ⇒ ALU output = 0 ⇒ Z set ⇒ branch to Taken (0x101).
+    {
+      const state = createMachineState(64);
+      state.controlStore = r.controlStore;
+      state.MDR = 0;
+      state.MPC = 0;
+      const trace = step(state);
+      expect(trace.aluFlags.Z).toBe(true);
+      expect(trace.mpcAfter).toBe(0x101);
+    }
+    // Z-false: MDR = 7 ⇒ ALU output = 7 ⇒ Z clear ⇒ fall through to 0x001.
+    {
+      const state = createMachineState(64);
+      state.controlStore = r.controlStore;
+      state.MDR = 7;
+      state.MPC = 0;
+      const trace = step(state);
+      expect(trace.aluFlags.Z).toBe(false);
+      expect(trace.mpcAfter).toBe(0x001);
+    }
   });
 
   it('reports unknown label', () => {

@@ -174,11 +174,21 @@ function validatedJamGoto(
     });
     return { nextAddress: 0, jam, errors };
   }
-  // The JAM trick on MIC-1: a conditional `if (N|Z) goto Label` requires that
-  // the "fallthrough" and "taken" addresses share their low 8 bits, since
-  // JAMN/JAMZ only OR bit 8. We do not enforce this here — Tanenbaum's micro-
-  // assembler usually places labels at appropriate addresses by convention,
-  // and we can't validate without knowing the fall-through address. The
-  // simulator does the right thing at runtime regardless.
+  // The JAM trick on MIC-1: NEXT_ADDR is 9 bits but in conditional `if (N|Z)
+  // goto Label` the hardware OR's bit 8 from the JAM result. The micro-
+  // assembler is responsible for emitting NEXT_ADDR with bit 8 = 0 (the
+  // fall-through address). The taken-branch label is required to live in the
+  // upper half (bit 8 = 1) so JAM's bit-8 OR reaches it; the fall-through
+  // microinstruction must be placed at (target & 0xFF).
+  if (jam.JAMN || jam.JAMZ) {
+    if ((addr & 0x100) === 0) {
+      errors.push({
+        line: loc.line,
+        column: loc.column,
+        message: `Conditional 'if' target 0x${addr.toString(16)} must be in 0x100..0x1FF (the JAM mechanism only sets bit 8). Place the taken-branch microinstruction in the upper half and a fall-through microinstruction at 0x${(addr & 0xff).toString(16).padStart(2, '0')}.`,
+      });
+    }
+    return { nextAddress: addr & 0xff, jam, errors };
+  }
   return { nextAddress: addr & 0x1ff, jam, errors };
 }

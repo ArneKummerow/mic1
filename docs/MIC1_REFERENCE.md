@@ -87,7 +87,19 @@ Permitted constructs in any order, separated by `;`:
 - `goto (MBR)` — sets `JMPC`, `NEXT_ADDR = 0`.
 - `goto (MBR OR Label)` — sets `JMPC`, `NEXT_ADDR = Label`.
 
-The default microprogram (preloaded) implements the full IJVM instruction set in this style.
+The default microprogram implements the IJVM control-flow + locals subset:
+NOP, BIPUSH, LDC_W, ILOAD, ISTORE, IINC, POP, DUP, SWAP, IADD, ISUB, IAND,
+IOR, IFEQ, IFLT, IF_ICMPEQ, GOTO, ERR, HALT. INVOKEVIRTUAL / IRETURN /
+WIDE / IN / OUT are not yet wired up — they require constant-pool /
+method-prologue plumbing (the IJVM assembler doesn't have `.method` /
+`.const` directives) and, for IN/OUT, memory-mapped console I/O hooks in
+the simulator.
+
+**Conditional-branch layout convention (MIC-1 JAM trick).** Because the
+JAM mechanism only OR's bit 8 into MPC, the taken-branch target of any
+\`if (N|Z) goto T\` must live in 0x100..0x1FF, and a fall-through
+microinstruction must be placed at \`T & 0xFF\` in the lower half. The
+assembler enforces this and stores NEXT_ADDR = T & 0xFF.
 
 ## IJVM instruction set (subset implemented)
 

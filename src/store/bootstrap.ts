@@ -4,7 +4,22 @@ import { assembleMicrocode, type AssembleResult } from '../engine/mal';
 import { assembleIJVM, type IJVMAssembleResult } from '../engine/ijvm';
 
 export const DEFAULT_MEMORY_SIZE = 64 * 1024; // 64 KiB
+
+/**
+ * Memory layout the default microprogram + sample expect:
+ *
+ *   bytes 0x000..0x2FF   method area (IJVM bytecode)
+ *   word  0xC0..0xFF     local-variable frame (64 slots)   ← LV
+ *   word  0x100..        operand stack (grows up)          ← SP starts here
+ *
+ * `LV` and `SP` are word indices — the engine multiplies by 4 for byte
+ * addressing on `rd`/`wr`. Putting LV at word 0xC0 keeps it well clear of
+ * the bytecode for any reasonable example program; the stack still starts
+ * at word 0x100, matching the integration tests.
+ */
+export const DEFAULT_LV_WORD = 0xc0;
 export const DEFAULT_STACK_BASE_WORD = 0x100; // first push lands here
+export const DEFAULT_CPP_WORD = 0x80; // constant pool — unused by default sample, set so LDC_W is well-defined
 
 export interface BootstrapResult {
   machine: MachineState;
@@ -33,6 +48,8 @@ export function bootstrap(microcode: string, macrocode: string): BootstrapResult
   machine.PC = 0;
   machine.MBR = machine.memory[0] ?? 0;
   machine.SP = DEFAULT_STACK_BASE_WORD - 1;
+  machine.LV = DEFAULT_LV_WORD;
+  machine.CPP = DEFAULT_CPP_WORD;
   machine.MPC = 0;
 
   return { machine, microAssembly, ijvmAssembly };
