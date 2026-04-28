@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockviewReact,
   themeAbyss,
@@ -42,8 +42,16 @@ const components = {
  * close button, since panels in this app cannot be hidden.
  */
 function ClosablelessTab(props: IDockviewPanelHeaderProps): JSX.Element {
+  const [isActive, setIsActive] = useState(props.api.isActive);
+
+  useEffect(() => {
+    const sub = props.api.onDidActiveChange((e) => setIsActive(e.isActive));
+    setIsActive(props.api.isActive);
+    return () => sub.dispose();
+  }, [props.api]);
+
   return (
-    <div className="mic1-tab" data-active={props.api.isActive}>
+    <div className="mic1-tab" data-active={isActive}>
       <span className="mic1-tab-title">{props.api.title}</span>
     </div>
   );
