@@ -93,6 +93,47 @@ directives above before they can be exercised.
 - [ ] **`WIDE` example** — a method with > 256 locals, or a constant pool
   reference > 0xFF, demonstrating the wide-prefix dispatch.
 
+## Control store view & microinstruction inspector
+
+- [ ] **Detailed bit-level view toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
+  Add a toggle that switches the table from the current row-per-µinstruction
+  text rendering to a bit-decomposed layout matching Tanenbaum's textbook
+  microinstruction word (36 bits, in this column order):
+  - `NEXT_ADDRESS` (9 bits) — rendered in **hex**, not as individual bits
+  - `JMPC`, `JAMN`, `JAMZ` (3 bits, JAM)
+  - `SLL8`, `SRA1` (2 bits, shifter)
+  - `F0`, `F1`, `ENA`, `ENB`, `INVA`, `INC` (6 bits, ALU)
+  - `H`, `OPC`, `TOS`, `CPP`, `LV`, `SP`, `PC`, `MDR`, `MAR` (9 bits, C-bus enables)
+  - `WRITE`, `READ`, `FETCH` (3 bits, memory ops)
+  - B-bus (4-bit field) — shown by **register name** (`MDR` / `PC` / `MBR` /
+    `MBRU` / `SP` / `LV` / `CPP` / `TOS` / `OPC` / `NONE`), not as raw bits
+
+  Set bits color-highlighted; cleared bits dim/empty. Column headers are
+  the field names. Toggle state persists with the rest of the UI layout
+  (so the user's preferred view survives a reload). The data is already
+  in [src/engine/types.ts](src/engine/types.ts) — `Microinstruction` carries
+  every field above; this is purely a render mode for the existing rows.
+
+- [ ] **Hide-empty-rows toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
+  A second toggle that filters out unused control-store slots
+  (`controlStore[addr] === undefined`), but still indicates that rows are
+  hidden — either a single dim placeholder row between contiguous spans
+  of populated addresses, or a "… N rows hidden …" marker. Composes with
+  the bit-level view above. When breakpoints are set on hidden addresses,
+  collapse markers should still expose them so they're not invisible.
+
+- [ ] **Microinstruction inspector panel (new tab/pane).** A new layout
+  panel that renders only the *current* microinstruction (the one at
+  `lastTrace.mpcBefore`, falling back to `machine.MPC` before the first
+  step) using the bit-level view above. Default placement: directly
+  below the data-path view, occupying ~20% of vertical space — adjust
+  [src/components/defaultLayout.ts](src/components/defaultLayout.ts).
+  Updates every microcycle as MPC changes. Complements the data-path SVG:
+  one view shows flow through registers/buses, the other shows what the
+  current control word actually encodes. Useful for hovering over the
+  inspector to learn what each control bit does (cross-link to the hover
+  TODO under MAL editor).
+
 ## MAL editor — missing features in [src/components/MicrocodeEditor.tsx](src/components/MicrocodeEditor.tsx)
 
 The previous TODO marked these "done" but on inspection the wiring isn't
