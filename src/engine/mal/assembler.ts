@@ -152,6 +152,16 @@ function resolveNext(
     } else {
       baseAddr = labelAddr;
     }
+  } else if (u.orAddress !== undefined) {
+    if (u.orAddress < 0 || u.orAddress >= CONTROL_STORE_SIZE) {
+      errors.push({
+        line: u.line,
+        column: u.column,
+        message: `MBR-OR base 0x${u.orAddress.toString(16)} out of range`,
+      });
+    } else {
+      baseAddr = u.orAddress;
+    }
   }
   return {
     nextAddress: baseAddr & 0x1ff,

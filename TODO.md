@@ -7,58 +7,61 @@ Organization*.
 ## IJVM assembler — directive support
 
 The IJVM assembler in [src/engine/ijvm/assembler.ts](src/engine/ijvm/assembler.ts)
-is currently mnemonics-and-labels only. The directives below are claimed by
-[docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md) but not implemented; without
-them, `INVOKEVIRTUAL`/`IRETURN` / `LDC_W` / `WIDE` cannot be exercised
-naturally in source.
+now accepts directives so `INVOKEVIRTUAL`/`IRETURN`/`LDC_W`/`WIDE` can be
+exercised in source. See [src/engine/ijvm/assembler.test.ts](src/engine/ijvm/assembler.test.ts)
+for the supported syntax.
 
-- [ ] **`.method name(arg, arg, ...)` … `.end-method`.** Lays out the 4-byte
+- [x] **`.method name(arg, arg, ...)` … `.end-method`.** Lays out the 4-byte
   method prologue (2-byte arg count, 2-byte locals count) at the method's
   starting offset; binds `name` to a constant-pool entry whose value is the
   byte offset of the first prologue byte. Method entry semantics matching
   Tanenbaum's INVOKEVIRTUAL: caller pushes OBJREF + args; callee's LV is
   set to the OBJREF slot.
-- [ ] **`.var <name>`.** Inside a `.method`, declares a named local variable.
-  Resolves to a `ubyte` index for `ILOAD`/`ISTORE`/`IINC` (or `uword` after
-  `WIDE`). Indices auto-assigned starting after the implicit `this` slot
-  (LV[0] = OBJREF) and the declared `.args`.
-- [ ] **`.args <n>`.** Number of arguments (including OBJREF) the method
+- [x] **`.var <name>`.** Inside a `.method`, declares a named local variable.
+  Resolves to a `ubyte` index for `ILOAD`/`ISTORE`/`IINC`. Indices
+  auto-assigned starting after the implicit `this` slot (LV[0] = OBJREF) and
+  the declared parameters. (16-bit `WIDE`-encoded indices not yet folded by
+  the assembler — manual byte-construction still required.)
+- [x] **`.args <n>`.** Number of arguments (including OBJREF) the method
   consumes from the operand stack. Validates against the count declared in
   the `.method` header; informs the prologue's "args" field.
-- [ ] **`.const <name> <value>` / `.constant`.** Defines a 32-bit constant
+- [x] **`.const <name> <value>` / `.constant`.** Defines a 32-bit constant
   pool entry; binds `name` to its 16-bit unsigned index (suitable for
-  `LDC_W` / `INVOKEVIRTUAL`). Both spellings should be accepted — the
-  textbook uses `.constant`, the docs already mention both.
-- [ ] **Constant pool / method area memory layout.** Currently the assembler
-  emits one flat byte stream and bootstrap copies it to memory[0..N]. With
-  directives, output needs three regions (method bytes, constant-pool
-  words, optional initial LV frame) plus the addresses each is loaded at;
-  bootstrap should set CPP / LV / PC accordingly.
-- [ ] **Validation.** `BIPUSH` operand range, `ILOAD`/`ISTORE` against
-  `.var` count, `INVOKEVIRTUAL` against `.method` arg count, branch offsets
-  to undeclared labels, etc. Most of these need the directive infrastructure
-  before they're meaningful.
+  `LDC_W` / `INVOKEVIRTUAL`). Both spellings accepted.
+- [x] **Constant pool / method area memory layout.** `IJVMAssembleResult`
+  now exposes `bytes` (method area), `constants` (Int32Array), and
+  `methods` / `constantEntries` metadata; bootstrap writes the constant
+  pool to memory at `CPP * 4` (default `CPP = 0x80`).
+- [x] **Validation.** `BIPUSH` operand range was already enforced; new
+  checks include numeric `ILOAD`/`ISTORE`/`IINC` indices against the
+  declared local count, named operand resolution (locals vs constants),
+  duplicate `.method`/`.constant` names, unclosed `.method`, and
+  `.args` ↔ method-header consistency.
 
 ## Microcode — deferred IJVM opcodes
 
-These sit unimplemented in
-[src/engine/defaultMicrocode.ts](src/engine/defaultMicrocode.ts). The
-microcode itself is straightforward (mostly Tanenbaum Fig. 4-17 with
-the usual 1-cycle-fetch-delay adaptation), but most need the assembler
-directives above before they can be exercised.
+Implemented in [src/engine/defaultMicrocode.ts](src/engine/defaultMicrocode.ts).
+Layout: regular ILOAD continuation moved from `0x180..0x184` to
+`0x148..0x14C` so the wide IINC entry has room at `0x184`; wide IINC's
+continuation parks at `0x1B5..0x1BC` because the run after `0x184` overlaps
+ISTORE.
 
-- [ ] **`INVOKEVIRTUAL` (0xB6).** ~21 microinstructions. Resolves a 16-bit
-  constant-pool index to a method address, reads num-args/num-locals from
-  the prologue, pushes the link pointer (return PC + saved LV) under the
-  args, sets new LV/PC, falls into `Main1` with the new method's first
-  opcode pre-fetched.
-- [ ] **`IRETURN` (0xAC).** ~8 microinstructions. Pops return value, walks
-  the link pointer to restore caller's PC and LV, places return value at
-  caller's new TOS, dispatches.
-- [ ] **`WIDE` (0xC4).** ~1 dispatch microinstruction:
-  `PC = PC + 1; fetch; goto (MBR OR 0x100)`. Then "wide" variants of
-  `ILOAD` / `ISTORE` / `IINC` at the 0x115 / 0x136 / 0x184 entries that
-  read a 16-bit index across two operand bytes instead of one.
+- [x] **`INVOKEVIRTUAL` (0xB6).** Entry at `0x0B6`, continuation at
+  `0x1D6..0x1EE` (25 microinstructions). Reads the 16-bit constant-pool
+  index, fetches the method address, walks the 4-byte prologue
+  (argsCount/localsCount) while assembling new_LV and new_SP, writes
+  return-PC + caller-LV into the link area and the link pointer into the
+  OBJREF slot, sets new LV/SP/PC, and pre-fetches the method's first opcode.
+- [x] **`IRETURN` (0xAC).** Entry at `0x0AC`, continuation at
+  `0x1F0..0x1F7` (8 microinstructions). Reads link_ptr from `LV[0]`,
+  pulls saved PC and saved LV from the link area, writes the return
+  value at the OBJREF slot, restores caller's `LV`/`PC`/`SP`, pre-fetches
+  the next caller opcode.
+- [x] **`WIDE` (0xC4).** Two-cycle dispatch (`wide1` at `0x0C4` issues the
+  fetch, `wide2` at `0x185` does `goto (MBR OR 0x100)`). Wide variants:
+  `wide_iload` (`0x115..0x11C`), `wide_istore` (`0x136..0x13E`),
+  `wide_iinc` (entry `0x184`, continuation `0x1B5..0x1BC`). Each reads a
+  16-bit index across two operand bytes.
 - [ ] **`IN` (0xFC).** Read a byte from the console input buffer; push 0 if
   the buffer is empty (or stall — see simulator section). Needs memory-
   mapped I/O wiring on the simulator side.
@@ -86,12 +89,15 @@ directives above before they can be exercised.
 ## Default microcode / macrocode samples
 
 - [ ] **Recursive factorial or Fibonacci sample** using
-  `INVOKEVIRTUAL` / `IRETURN` once the directive + microcode work above
-  lands. This is the most useful pedagogical exercise of the call mechanism.
+  `INVOKEVIRTUAL` / `IRETURN`. Directive + microcode work landed — see the
+  "recursive sum 1..5" integration test for a working pattern, but the
+  default `DEFAULT_MACROCODE` is still the iterative sum-1..N loop.
 - [ ] **Echo / hello-world sample** once `IN` / `OUT` work — read bytes
   until newline, push, OUT-loop them.
 - [ ] **`WIDE` example** — a method with > 256 locals, or a constant pool
-  reference > 0xFF, demonstrating the wide-prefix dispatch.
+  reference > 0xFF, demonstrating the wide-prefix dispatch. (Microcode is
+  in place; the assembler doesn't yet fold `WIDE ILOAD` etc. into a
+  wide-encoded instruction, so callers must hand-emit the bytes.)
 
 ## Control store view & microinstruction inspector
 

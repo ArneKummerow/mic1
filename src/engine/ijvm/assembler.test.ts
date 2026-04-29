@@ -166,3 +166,217 @@ describe('IJVM assembler: source map', () => {
     expect(r.lineByAddress.get(4)).toBe(4);
   });
 });
+
+describe('IJVM assembler: directives — .constant', () => {
+  it('binds .constant name and resolves it as a 16-bit pool index in LDC_W', () => {
+    const r = assembleIJVM(`
+      .constant FOO 0xCAFE
+      LDC_W FOO
+      HALT
+    `);
+    expectNoErrors(r);
+    expect([...r.bytes]).toEqual([0x13, 0x00, 0x00, 0xff]);
+    expect(r.constants.length).toBe(1);
+    expect(r.constants[0]).toBe(0xcafe | 0);
+    expect(r.constantEntries[0].name).toBe('FOO');
+    expect(r.constantEntries[0].index).toBe(0);
+  });
+
+  it('accepts .const as an alias for .constant', () => {
+    const r = assembleIJVM(`
+      .const A 1
+      .const B 2
+      LDC_W B
+      HALT
+    `);
+    expectNoErrors(r);
+    expect([...r.bytes]).toEqual([0x13, 0x00, 0x01, 0xff]);
+    expect(r.constants[0]).toBe(1);
+    expect(r.constants[1]).toBe(2);
+  });
+
+  it('rejects duplicate constant names', () => {
+    const r = assembleIJVM(`
+      .constant DUP 1
+      .constant DUP 2
+    `);
+    expect(r.errors.some((e) => /Duplicate constant 'DUP'/.test(e.message))).toBe(true);
+  });
+
+  it('reports unknown constant in LDC_W', () => {
+    const r = assembleIJVM(`LDC_W NOPE\nHALT`);
+    expect(r.errors.some((e) => /Unknown constant 'NOPE'/.test(e.message))).toBe(true);
+  });
+
+  it('preserves negative 32-bit constants as int32', () => {
+    const r = assembleIJVM(`
+      .const NEG -1
+      LDC_W NEG
+      HALT
+    `);
+    expectNoErrors(r);
+    expect(r.constants[0]).toBe(-1);
+  });
+});
+
+describe('IJVM assembler: directives — .method / .var / .args', () => {
+  it('emits a 4-byte prologue and binds method name as constant', () => {
+    const r = assembleIJVM(`
+      .method foo()
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    // Prologue: argsCount=1 (just OBJREF), localsCount=0; then IRETURN (0xAC).
+    expect([...r.bytes]).toEqual([0x00, 0x01, 0x00, 0x00, 0xac]);
+    expect(r.methods.has('foo')).toBe(true);
+    expect(r.methods.get('foo')!.argsCount).toBe(1);
+    expect(r.methods.get('foo')!.localsCount).toBe(0);
+    expect(r.methods.get('foo')!.prologueAddress).toBe(0);
+    // Method registers a constant pool entry whose value is the prologue addr.
+    expect(r.constantEntries[0].name).toBe('foo');
+    expect(r.constantEntries[0].isMethod).toBe(true);
+    expect(r.constants[0]).toBe(0);
+  });
+
+  it('counts named args (incl OBJREF) and locals separately', () => {
+    const r = assembleIJVM(`
+      .method bar(p1, p2)
+        .var v1
+        .var v2
+        .var v3
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    expect(r.methods.get('bar')!.argsCount).toBe(3); // OBJREF + p1 + p2
+    expect(r.methods.get('bar')!.localsCount).toBe(3);
+    expect([...r.bytes.slice(0, 4)]).toEqual([0x00, 0x03, 0x00, 0x03]);
+  });
+
+  it('resolves named args and vars in ILOAD/ISTORE/IINC', () => {
+    const r = assembleIJVM(`
+      .method foo(p1)
+        .var v1
+        ILOAD p1
+        ISTORE v1
+        IINC v1, 5
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    // Prologue (4 bytes), then ILOAD 1 (p1), ISTORE 2 (v1), IINC 2,5, IRETURN.
+    expect([...r.bytes]).toEqual([
+      0x00, 0x02, 0x00, 0x01, // prologue: args=2, locals=1
+      0x15, 0x01,             // ILOAD p1 (LV[1])
+      0x36, 0x02,             // ISTORE v1 (LV[2])
+      0x84, 0x02, 0x05,       // IINC v1, 5
+      0xac,                   // IRETURN
+    ]);
+  });
+
+  it('resolves method name as constant pool index in INVOKEVIRTUAL', () => {
+    const r = assembleIJVM(`
+      .method foo()
+        IRETURN
+      .end-method
+      .method bar()
+        INVOKEVIRTUAL foo
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    // foo prologue + IRETURN at 0..4. bar prologue at 5..8, INVOKEVIRTUAL at 9.
+    // foo's constant pool index = 0, bar's = 1.
+    expect(r.bytes[9]).toBe(0xb6); // INVOKEVIRTUAL
+    expect((r.bytes[10] << 8) | r.bytes[11]).toBe(0); // refers to foo (pool idx 0)
+  });
+
+  it('errors on .var outside of .method', () => {
+    const r = assembleIJVM(`.var foo`);
+    expect(r.errors.some((e) => /\.var outside of \.method/.test(e.message))).toBe(true);
+  });
+
+  it('errors on duplicate local within a method', () => {
+    const r = assembleIJVM(`
+      .method m(x)
+        .var x
+        IRETURN
+      .end-method
+    `);
+    expect(r.errors.some((e) => /Duplicate local 'x'/.test(e.message))).toBe(true);
+  });
+
+  it('errors on unknown local in ILOAD inside a method', () => {
+    const r = assembleIJVM(`
+      .method m()
+        ILOAD nope
+        IRETURN
+      .end-method
+    `);
+    expect(r.errors.some((e) => /Unknown local 'nope'/.test(e.message))).toBe(true);
+  });
+
+  it('errors on unclosed .method', () => {
+    const r = assembleIJVM(`
+      .method orphan()
+        IRETURN
+    `);
+    expect(r.errors.some((e) => /missing \.end-method/.test(e.message))).toBe(true);
+  });
+
+  it('errors on duplicate method name', () => {
+    const r = assembleIJVM(`
+      .method foo()
+        IRETURN
+      .end-method
+      .method foo()
+        IRETURN
+      .end-method
+    `);
+    expect(r.errors.some((e) => /Duplicate (method|constant) 'foo'/.test(e.message))).toBe(true);
+  });
+
+  it('.args N validates against the method header', () => {
+    const ok = assembleIJVM(`
+      .method m(a, b)
+        .args 3
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(ok);
+    const bad = assembleIJVM(`
+      .method m(a, b)
+        .args 5
+        IRETURN
+      .end-method
+    `);
+    expect(bad.errors.some((e) => /\.args 5 disagrees/.test(e.message))).toBe(true);
+  });
+
+  it('numeric ILOAD index inside .method validates against declared count', () => {
+    const r = assembleIJVM(`
+      .method m(a)
+        .var b
+        ILOAD 9
+        IRETURN
+      .end-method
+    `);
+    expect(r.errors.some((e) => /Local index 9 exceeds 2/.test(e.message))).toBe(true);
+  });
+});
+
+describe('IJVM assembler: source map with directives', () => {
+  it('records line ↔ address for .method prologue', () => {
+    const r = assembleIJVM(`
+      .method m()
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    // Line 2 (the .method line) maps to the prologue's address (0).
+    expect(r.addressByLine.get(2)).toBe(0);
+    // Line 3 (IRETURN) maps past the 4-byte prologue (4).
+    expect(r.addressByLine.get(3)).toBe(4);
+  });
+});

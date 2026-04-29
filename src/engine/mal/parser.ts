@@ -85,7 +85,7 @@ export type Statement =
 export type GotoTarget =
   | { kind: 'label'; name: string; token: Token }
   | { kind: 'addr'; value: number; token: Token }
-  | { kind: 'mbr'; orLabel?: string; token: Token };
+  | { kind: 'mbr'; orLabel?: string; orAddress?: number; token: Token };
 
 export interface ParsedLine {
   /** 1-based line number in the source. */
@@ -342,13 +342,25 @@ class Parser {
         this.fail(inner, `Expected 'MBR' in indirect goto, got '${inner.value}'`);
       }
       let orLabel: string | undefined;
+      let orAddress: number | undefined;
       if (this.peek().type === 'OR') {
         this.advance();
-        const labelTok = this.expectIdent();
-        orLabel = labelTok.value;
+        const next = this.peek();
+        if (next.type === 'NUMBER') {
+          this.advance();
+          orAddress = parseNumber(next);
+        } else {
+          const labelTok = this.expectIdent();
+          orLabel = labelTok.value;
+        }
       }
       this.expect('RPAREN');
-      return { kind: 'mbr', token: t, ...(orLabel !== undefined && { orLabel }) };
+      return {
+        kind: 'mbr',
+        token: t,
+        ...(orLabel !== undefined && { orLabel }),
+        ...(orAddress !== undefined && { orAddress }),
+      };
     }
     if (t.type === 'NUMBER') {
       this.advance();

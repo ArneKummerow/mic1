@@ -17,10 +17,25 @@ const CPP_WORD = 0x80;
  *   - sets PC, SP, LV, CPP to sensible initial values
  *   - sets MPC to Main1
  */
-function bootstrap(controlStore: ReturnType<typeof assembleMicrocode>['controlStore'], bytes: Uint8Array): ReturnType<typeof createMachineState> {
+function bootstrap(
+  controlStore: ReturnType<typeof assembleMicrocode>['controlStore'],
+  bytes: Uint8Array,
+  constants?: Int32Array,
+): ReturnType<typeof createMachineState> {
   const state = createMachineState(64 * 1024);
   state.controlStore = controlStore;
   state.memory.set(bytes, 0);
+  if (constants) {
+    const cppByte = CPP_WORD * 4;
+    for (let i = 0; i < constants.length; i++) {
+      const v = constants[i] | 0;
+      const off = cppByte + i * 4;
+      state.memory[off + 0] = (v >>> 24) & 0xff;
+      state.memory[off + 1] = (v >>> 16) & 0xff;
+      state.memory[off + 2] = (v >>> 8) & 0xff;
+      state.memory[off + 3] = v & 0xff;
+    }
+  }
   state.PC = 0;
   state.MBR = state.memory[0];
   state.SP = STACK_BASE_WORD - 1;
@@ -408,5 +423,226 @@ describe('integration: full pipeline', () => {
     const { halted } = runToHalt(state, 5000);
     expect(halted).toBe(true);
     expect(state.TOS).toBe(15);
+  });
+});
+
+describe('integration: INVOKEVIRTUAL / IRETURN', () => {
+  it('zero-arg method returns a constant', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 0          // OBJREF
+            INVOKEVIRTUAL fortytwo
+            HALT
+        .method fortytwo()
+            BIPUSH 42
+            IRETURN
+        .end-method
+    `);
+    expect(micro.errors).toEqual([]);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 5000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(42);
+    // After IRETURN the stack should be just the return value (one slot
+    // above the original SP).
+    expect(state.SP).toBe(STACK_BASE_WORD);
+  });
+
+  it('method with two args adds them and returns', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 0          // OBJREF
+            BIPUSH 5
+            BIPUSH 7
+            INVOKEVIRTUAL add
+            HALT
+        .method add(a, b)
+            ILOAD a
+            ILOAD b
+            IADD
+            IRETURN
+        .end-method
+    `);
+    expect(micro.errors).toEqual([]);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 5000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(12);
+    expect(state.SP).toBe(STACK_BASE_WORD);
+  });
+
+  it('method uses a local variable', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 0
+            BIPUSH 6
+            INVOKEVIRTUAL square
+            HALT
+        .method square(n)
+            .var tmp
+            ILOAD n
+            ILOAD n
+            IADD
+            ISTORE tmp
+            ILOAD tmp
+            ILOAD n
+            IADD
+            IRETURN
+        .end-method
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 8000);
+    expect(halted).toBe(true);
+    // 3 * n where n=6 → 18
+    expect(state.TOS).toBe(18);
+  });
+
+  it('caller registers (LV, SP, PC) restored on IRETURN', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 1
+            BIPUSH 2
+            BIPUSH 0          // OBJREF
+            BIPUSH 9
+            INVOKEVIRTUAL doubler
+            IADD              // pop the doubled value + the 2
+            HALT
+        .method doubler(n)
+            ILOAD n
+            ILOAD n
+            IADD
+            IRETURN
+        .end-method
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const lvBefore = state.LV;
+    const { halted } = runToHalt(state, 8000);
+    expect(halted).toBe(true);
+    // After IRETURN: stack holds [1, 2, 18]. Final IADD: 2 + 18 = 20. Then
+    // HALT. TOS = 20, SP = STACK_BASE_WORD + 1 (1 left).
+    expect(state.TOS).toBe(20);
+    expect(state.LV).toBe(lvBefore);
+  });
+
+  it('recursive sum 1..5 = 15 via INVOKEVIRTUAL/IRETURN', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 0          // OBJREF
+            BIPUSH 5
+            INVOKEVIRTUAL sum
+            HALT
+        .method sum(n)
+            ILOAD n
+            IFEQ baseCase
+            // sum(n) = n + sum(n-1)
+            ILOAD n
+            BIPUSH 0          // OBJREF for recursive call
+            ILOAD n
+            BIPUSH -1
+            IADD
+            INVOKEVIRTUAL sum
+            IADD
+            IRETURN
+        baseCase:
+            BIPUSH 0
+            IRETURN
+        .end-method
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 50000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(15);
+  });
+
+  it('nested call: f(x) = g(x)+1, g(x) = x+x', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+            BIPUSH 0
+            BIPUSH 4
+            INVOKEVIRTUAL f
+            HALT
+        .method f(x)
+            BIPUSH 0          // OBJREF for inner call
+            ILOAD x
+            INVOKEVIRTUAL g
+            BIPUSH 1
+            IADD
+            IRETURN
+        .end-method
+        .method g(x)
+            ILOAD x
+            ILOAD x
+            IADD
+            IRETURN
+        .end-method
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 12000);
+    expect(halted).toBe(true);
+    // g(4) = 8, f(4) = 9
+    expect(state.TOS).toBe(9);
+    expect(state.SP).toBe(STACK_BASE_WORD);
+  });
+});
+
+describe('integration: WIDE prefix', () => {
+  it('WIDE ILOAD reads a 16-bit local index', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    // The IJVM assembler doesn't fold WIDE+ILOAD into a wide-encoded
+    // instruction yet, so we hand-assemble: WIDE (0xC4), ILOAD (0x15),
+    // index (16-bit big-endian) — here index = 1.
+    const ijvm = assembleIJVM(`HALT`);
+    const program = new Uint8Array([0xc4, 0x15, 0x00, 0x01, 0xff]);
+    const state = bootstrap(micro.controlStore, program);
+    // Pre-populate LV[1] = 0x1234.
+    const lvByte = (LV_WORD + 1) * 4;
+    state.memory[lvByte + 0] = 0x00;
+    state.memory[lvByte + 1] = 0x00;
+    state.memory[lvByte + 2] = 0x12;
+    state.memory[lvByte + 3] = 0x34;
+    const { halted } = runToHalt(state, 1000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(0x1234);
+    expect(ijvm.errors).toEqual([]); // unrelated, but covers HALT-only assembly
+  });
+
+  it('WIDE ISTORE writes through a 16-bit index', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    // BIPUSH 99 ; WIDE ISTORE 2 ; HALT
+    const program = new Uint8Array([0x10, 99, 0xc4, 0x36, 0x00, 0x02, 0xff]);
+    const state = bootstrap(micro.controlStore, program);
+    const { halted } = runToHalt(state, 1000);
+    expect(halted).toBe(true);
+    const lvByte = (LV_WORD + 2) * 4;
+    const stored =
+      (state.memory[lvByte] << 24) |
+      (state.memory[lvByte + 1] << 16) |
+      (state.memory[lvByte + 2] << 8) |
+      state.memory[lvByte + 3];
+    expect(stored).toBe(99);
+  });
+
+  it('WIDE IINC adds a sign-extended byte to a 16-bit-indexed local', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    // BIPUSH 10 ; ISTORE 3 ; WIDE IINC 0x0003, -4 ; ILOAD 3 ; HALT
+    const program = new Uint8Array([
+      0x10, 10,           // BIPUSH 10
+      0x36, 0x03,         // ISTORE 3
+      0xc4, 0x84,         // WIDE IINC
+      0x00, 0x03,         //   idx = 3 (16-bit)
+      0xfc,               //   const = -4 (sign-extended)
+      0x15, 0x03,         // ILOAD 3
+      0xff,               // HALT
+    ]);
+    const state = bootstrap(micro.controlStore, program);
+    const { halted } = runToHalt(state, 2000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(6);
   });
 });

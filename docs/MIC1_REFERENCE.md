@@ -85,15 +85,16 @@ Permitted constructs in any order, separated by `;`:
 - `goto Label` — sets `NEXT_ADDR`.
 - `if (N) goto Label` / `if (Z) goto Label` — sets `JAMN`/`JAMZ`. Requires `Label` and `Label - 0x100` to share their low 8 bits, per the standard JAM trick.
 - `goto (MBR)` — sets `JMPC`, `NEXT_ADDR = 0`.
-- `goto (MBR OR Label)` — sets `JMPC`, `NEXT_ADDR = Label`.
+- `goto (MBR OR Label)` — sets `JMPC`, `NEXT_ADDR = Label`. The base also
+  accepts a numeric literal (e.g. `goto (MBR OR 0x100)`) for cases where
+  no convenient label sits at the desired upper-half base.
 
-The default microprogram implements the IJVM control-flow + locals subset:
-NOP, BIPUSH, LDC_W, ILOAD, ISTORE, IINC, POP, DUP, SWAP, IADD, ISUB, IAND,
-IOR, IFEQ, IFLT, IF_ICMPEQ, GOTO, ERR, HALT. INVOKEVIRTUAL / IRETURN /
-WIDE / IN / OUT are not yet wired up — they require constant-pool /
-method-prologue plumbing (the IJVM assembler doesn't have `.method` /
-`.const` directives) and, for IN/OUT, memory-mapped console I/O hooks in
-the simulator.
+The default microprogram implements the IJVM control-flow + locals subset
+plus method calls and the WIDE prefix: NOP, BIPUSH, LDC_W, ILOAD, ISTORE,
+IINC, POP, DUP, SWAP, IADD, ISUB, IAND, IOR, IFEQ, IFLT, IF_ICMPEQ, GOTO,
+INVOKEVIRTUAL, IRETURN, WIDE (with wide ILOAD / ISTORE / IINC variants
+dispatched through `(MBR OR 0x100)`), ERR, HALT. IN / OUT are not yet
+wired up — they require memory-mapped console I/O hooks in the simulator.
 
 **Conditional-branch layout convention (MIC-1 JAM trick).** Because the
 JAM mechanism only OR's bit 8 into MPC, the taken-branch target of any
@@ -132,7 +133,42 @@ Stack-based, word size = 32 bits. Bytes following the opcode are operands.
 | `0xFE` | `ERR`           | 0             | error halt                               |
 | `0xFF` | `HALT`          | 0             | normal halt                              |
 
-The assembler also accepts pseudo-directives: `.method`, `.var`, `.args`, `.end-method`, `.const`, `.constant`.
+### Assembler directives
+
+```
+.constant NAME <int32>          ; 32-bit constant pool entry, named NAME
+.const    NAME <int32>          ;   (alias)
+
+.method foo(p1, p2, ...)        ; start a method body. Lays out a 4-byte
+  .args 3                       ;   prologue (argsCount big-endian,
+  .var v1                       ;   localsCount big-endian) and binds `foo`
+  .var v2                       ;   as a constant-pool entry whose value is
+  ILOAD p1                      ;   the prologue's byte address.
+  ...
+.end-method
+```
+
+Local-variable layout for `.method foo(p1, p2)` with `.var v1; .var v2`:
+
+| Slot   | Holds                                    |
+|--------|------------------------------------------|
+| LV[0]  | OBJREF (the implicit `this` slot)        |
+| LV[1]  | p1                                       |
+| LV[2]  | p2                                       |
+| LV[3]  | v1                                       |
+| LV[4]  | v2                                       |
+
+`argsCount` in the prologue is the number of stack slots consumed
+(1 OBJREF + named args). `localsCount` is the additional `.var`s.
+
+Operand resolution:
+- `ILOAD` / `ISTORE` / `IINC <name>` → local index (named arg or `.var`).
+- `LDC_W` / `INVOKEVIRTUAL <name>` → constant-pool index.
+- `GOTO` / `IFEQ` / `IFLT` / `IF_ICMPEQ <name>` → branch label (PC-relative).
+
+The `WIDE` prefix is recognised at runtime by the microcode but not yet
+folded into a 16-bit-index encoding by the assembler; programs that need
+indices > 0xFF must currently hand-emit the bytes.
 
 ## Memory layout (default)
 

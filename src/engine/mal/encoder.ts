@@ -47,7 +47,7 @@ export type UnresolvedNext =
   | { kind: 'sequential' }
   | { kind: 'absolute'; address: number; jam: JamControl }
   | { kind: 'label'; name: string; jam: JamControl; line: number; column: number }
-  | { kind: 'mbr'; orLabel?: string; line: number; column: number };
+  | { kind: 'mbr'; orLabel?: string; orAddress?: number; line: number; column: number };
 
 // Narrowed expression types ---------------------------------------------
 
@@ -372,6 +372,7 @@ export function encodeLine(parsedLine: ParsedLine): {
           unresolvedNext = {
             kind: 'mbr',
             ...(t.orLabel !== undefined && { orLabel: t.orLabel }),
+            ...(t.orAddress !== undefined && { orAddress: t.orAddress }),
             line: t.token.line,
             column: t.token.column,
           };
