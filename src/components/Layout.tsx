@@ -15,6 +15,7 @@ import { MemoryView } from './MemoryView';
 import { StackView } from './StackView';
 import { RegisterPanel } from './RegisterPanel';
 import { ControlStoreView } from './ControlStoreView';
+import { MicroInspector } from './MicroInspector';
 import { Console } from './Console';
 import { LAYOUT_STORAGE_KEY, setDockApi } from './layoutApi';
 import { applyDefaultLayout } from './defaultLayout';
@@ -34,6 +35,7 @@ const components = {
   stack: () => <StackView />,
   registers: () => <RegisterPanel />,
   controlStore: () => <ControlStoreView />,
+  microInspector: () => <MicroInspector />,
   console: () => <Console />,
 } as const satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>;
 

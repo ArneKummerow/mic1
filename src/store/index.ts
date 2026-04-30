@@ -81,6 +81,13 @@ export interface AppState {
   /** Number of step-back snapshots currently retained. */
   historyDepth: number;
 
+  /**
+   * Persisted UI preferences (rendering toggles etc.). Kept here rather
+   * than in component state so they survive a reload alongside the
+   * editor sources.
+   */
+  uiPrefs: UiPrefs;
+
   // Actions.
   setMicrocode: (text: string) => void;
   setMacrocode: (text: string) => void;
@@ -99,7 +106,22 @@ export interface AppState {
   appendConsoleInput: (s: string) => void;
   resetToDefaults: () => void;
   copyShareUrl: () => Promise<string>;
+
+  setControlStoreBitView: (v: boolean) => void;
+  setControlStoreHideEmpty: (v: boolean) => void;
 }
+
+export interface UiPrefs {
+  /** Render the Control Store rows in 36-bit-word-decomposed layout. */
+  controlStoreBitView: boolean;
+  /** Hide unused control-store slots (with placeholder span markers). */
+  controlStoreHideEmpty: boolean;
+}
+
+const DEFAULT_UI_PREFS: UiPrefs = {
+  controlStoreBitView: false,
+  controlStoreHideEmpty: false,
+};
 
 let runIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -149,6 +171,7 @@ export const useAppStore = create<AppState>()(
         currentOpcodeAddress: 0,
         tick: 0,
         historyDepth: 0,
+        uiPrefs: { ...DEFAULT_UI_PREFS },
 
         setMicrocode: (text) => {
           set({ microcode: text });
@@ -378,12 +401,23 @@ export const useAppStore = create<AppState>()(
           }
           return url;
         },
+
+        setControlStoreBitView: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, controlStoreBitView: v } });
+        },
+        setControlStoreHideEmpty: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, controlStoreHideEmpty: v } });
+        },
       }),
       {
         name: 'mic1-visualizer:v1',
-        // Only persist user-editable sources. Re-bootstrap derives everything
-        // else on load.
-        partialize: (s) => ({ microcode: s.microcode, macrocode: s.macrocode }),
+        // Only persist user-editable sources + UI prefs. Re-bootstrap derives
+        // everything else on load.
+        partialize: (s) => ({
+          microcode: s.microcode,
+          macrocode: s.macrocode,
+          uiPrefs: s.uiPrefs,
+        }),
         // After hydration, run a fresh bootstrap so the machine reflects the
         // restored sources.
         onRehydrateStorage: () => (state) => {

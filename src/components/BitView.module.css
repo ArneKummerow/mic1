@@ -1,0 +1,61 @@
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  font-size: 10px;
+  padding: 0 2px;
+  flex: 0 0 auto;
+  text-align: center;
+  border-right: 1px solid var(--bg-3);
+  background: var(--bg-1);
+}
+
+.cell:last-child {
+  border-right: none;
+}
+
+.headerCell {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-2);
+  cursor: help;
+}
+
+.groupSep {
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.bitOff {
+  color: var(--fg-3);
+  opacity: 0.4;
+}
+
+.bitOn {
+  color: var(--fg-1);
+  font-weight: 700;
+}
+
+.textCell {
+  color: var(--fg-1);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Group color accents — applied only to set bits so visual scanning groups
+ * by function. */
+.grp_jam { background: color-mix(in srgb, var(--accent-2) 28%, transparent); }
+.grp_shifter { background: color-mix(in srgb, var(--bus-c) 28%, transparent); }
+.grp_alu { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.grp_cbus { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.grp_mem { background: color-mix(in srgb, var(--mem-fetch) 28%, transparent); }

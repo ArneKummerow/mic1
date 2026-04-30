@@ -3,6 +3,7 @@ import { FixedSizeList } from 'react-window';
 import { useAppStore } from '../store';
 import type { Microinstruction } from '../engine/types';
 import { CONTROL_STORE_SIZE } from '../engine/mal';
+import { BitFieldHeader, BitFieldRow, BIT_FIELDS_WIDTH } from './BitView';
 import styles from './ControlStoreView.module.css';
 
 const ROW_HEIGHT = 22;
@@ -47,11 +48,22 @@ function summarizeJam(instr: Microinstruction): string {
   return parts.join(' ');
 }
 
+/**
+ * Per-row payload. Each row is either an instruction (or undefined slot in
+ * non-collapsed mode) at a specific microaddress, or a "gap" marker
+ * representing a span of contiguous empty addresses that have been hidden.
+ */
+type RowItem =
+  | { kind: 'instr'; address: number }
+  | { kind: 'gap'; from: number; to: number };
+
 interface RowData {
+  items: readonly RowItem[];
   controlStore: readonly (Microinstruction | undefined)[];
   currentMpc: number;
   breakpoints: ReadonlySet<number>;
   toggleBreakpoint: (addr: number) => void;
+  bitView: boolean;
 }
 
 function Row({
@@ -63,9 +75,23 @@ function Row({
   style: React.CSSProperties;
   data: RowData;
 }): JSX.Element {
-  const instr = data.controlStore[index];
-  const isCurrent = data.currentMpc === index;
-  const hasBreakpoint = data.breakpoints.has(index);
+  const item = data.items[index];
+
+  if (item.kind === 'gap') {
+    const count = item.to - item.from + 1;
+    return (
+      <div style={style} className={`${styles.row} ${styles.gapRow}`}>
+        <span className={styles.bpDot} aria-hidden />
+        <span className={`mono ${styles.addr}`}>{fmtMpc(item.from)}</span>
+        <span className={styles.gapText}>… {count} empty row{count === 1 ? '' : 's'} hidden …</span>
+      </div>
+    );
+  }
+
+  const addr = item.address;
+  const instr = data.controlStore[addr];
+  const isCurrent = data.currentMpc === addr;
+  const hasBreakpoint = data.breakpoints.has(addr);
   const isEmpty = !instr;
 
   const rowClass = [
@@ -80,19 +106,66 @@ function Row({
     <div style={style} className={rowClass}>
       <button
         className={`${styles.bpDot} ${hasBreakpoint ? styles.bpActive : ''}`}
-        onClick={() => data.toggleBreakpoint(index)}
+        onClick={() => data.toggleBreakpoint(addr)}
         title={hasBreakpoint ? 'Remove breakpoint' : 'Set breakpoint'}
         aria-label="Toggle breakpoint"
       />
-      <span className={`mono ${styles.addr}`}>{fmtMpc(index)}</span>
+      <span className={`mono ${styles.addr}`}>{fmtMpc(addr)}</span>
       <span className={styles.label}>{instr?.label ?? ''}</span>
-      <span className={`mono ${styles.alu}`}>{instr ? summarizeAlu(instr) : '—'}</span>
-      <span className={`mono ${styles.cBus}`}>{instr ? [...instr.cBus].join(',') : ''}</span>
-      <span className={`mono ${styles.mem}`}>{instr ? summarizeMem(instr) : ''}</span>
-      <span className={`mono ${styles.next}`}>{instr ? `→${fmtMpc(instr.nextAddress)}` : ''}</span>
-      <span className={`mono ${styles.jam}`}>{instr ? summarizeJam(instr) : ''}</span>
+      {data.bitView ? (
+        <span className={styles.bitsCell} style={{ width: BIT_FIELDS_WIDTH }}>
+          <BitFieldRow instr={instr} />
+        </span>
+      ) : (
+        <>
+          <span className={`mono ${styles.alu}`}>{instr ? summarizeAlu(instr) : '—'}</span>
+          <span className={`mono ${styles.cBus}`}>{instr ? [...instr.cBus].join(',') : ''}</span>
+          <span className={`mono ${styles.mem}`}>{instr ? summarizeMem(instr) : ''}</span>
+          <span className={`mono ${styles.next}`}>{instr ? `→${fmtMpc(instr.nextAddress)}` : ''}</span>
+          <span className={`mono ${styles.jam}`}>{instr ? summarizeJam(instr) : ''}</span>
+        </>
+      )}
     </div>
   );
+}
+
+/**
+ * Build the rendered row list, optionally collapsing empty spans.
+ *
+ * In hide-empty mode, contiguous empty addresses are merged into a single
+ * gap marker — except that any address with a breakpoint is preserved as a
+ * regular row so the user never loses visibility of where they've set one.
+ */
+function buildItems(
+  controlStore: readonly (Microinstruction | undefined)[],
+  hideEmpty: boolean,
+  breakpoints: ReadonlySet<number>,
+): RowItem[] {
+  if (!hideEmpty) {
+    const items: RowItem[] = [];
+    for (let i = 0; i < CONTROL_STORE_SIZE; i++) items.push({ kind: 'instr', address: i });
+    return items;
+  }
+
+  const items: RowItem[] = [];
+  let gapStart: number | null = null;
+  const flushGap = (toExclusive: number): void => {
+    if (gapStart !== null) {
+      items.push({ kind: 'gap', from: gapStart, to: toExclusive - 1 });
+      gapStart = null;
+    }
+  };
+  for (let i = 0; i < CONTROL_STORE_SIZE; i++) {
+    const populated = controlStore[i] !== undefined || breakpoints.has(i);
+    if (populated) {
+      flushGap(i);
+      items.push({ kind: 'instr', address: i });
+    } else if (gapStart === null) {
+      gapStart = i;
+    }
+  }
+  flushGap(CONTROL_STORE_SIZE);
+  return items;
 }
 
 export function ControlStoreView(): JSX.Element {
@@ -103,6 +176,11 @@ export function ControlStoreView(): JSX.Element {
   const mpc = useAppStore((s) => s.lastTrace?.mpcBefore ?? s.machine.MPC);
   const breakpoints = useAppStore((s) => s.breakpoints);
   const toggleBreakpoint = useAppStore((s) => s.toggleBreakpoint);
+
+  const bitView = useAppStore((s) => s.uiPrefs.controlStoreBitView);
+  const hideEmpty = useAppStore((s) => s.uiPrefs.controlStoreHideEmpty);
+  const setBitView = useAppStore((s) => s.setControlStoreBitView);
+  const setHideEmpty = useAppStore((s) => s.setControlStoreHideEmpty);
 
   const listRef = useRef<FixedSizeList<RowData>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,26 +204,70 @@ export function ControlStoreView(): JSX.Element {
     return () => observer.disconnect();
   }, []);
 
+  const items = useMemo(
+    () => buildItems(controlStore, hideEmpty, breakpoints),
+    [controlStore, hideEmpty, breakpoints],
+  );
+
+  // Find which list row corresponds to the current MPC (so we can scroll to
+  // it). With hide-empty active, an empty MPC is folded into a gap row.
+  const currentRowIdx = useMemo(() => {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'instr' && it.address === mpc) return i;
+      if (it.kind === 'gap' && mpc >= it.from && mpc <= it.to) return i;
+    }
+    return 0;
+  }, [items, mpc]);
+
   useEffect(() => {
-    listRef.current?.scrollToItem(mpc, 'smart');
-  }, [mpc]);
+    listRef.current?.scrollToItem(currentRowIdx, 'smart');
+  }, [currentRowIdx]);
 
   const itemData: RowData = useMemo(
-    () => ({ controlStore, currentMpc: mpc, breakpoints, toggleBreakpoint }),
-    [controlStore, mpc, breakpoints, toggleBreakpoint],
+    () => ({ items, controlStore, currentMpc: mpc, breakpoints, toggleBreakpoint, bitView }),
+    [items, controlStore, mpc, breakpoints, toggleBreakpoint, bitView],
   );
 
   return (
     <div className="panel">
+      <div className={styles.toolbar}>
+        <label className={styles.toggle}>
+          <input
+            type="checkbox"
+            checked={bitView}
+            onChange={(e) => setBitView(e.target.checked)}
+          />
+          Bit view
+        </label>
+        <label className={styles.toggle}>
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
+          />
+          Hide empty rows
+        </label>
+        <span className={styles.toolbarSpacer} />
+        <span className={`mono ${styles.toolbarStat}`}>{items.length} rows</span>
+      </div>
       <div className={styles.headerRow} style={{ paddingRight: 6 + sbWidth }}>
         <span className={styles.colSpacer} />
         <span className={styles.addrCol}>Addr</span>
         <span className={styles.labelCol}>Label</span>
-        <span className={styles.aluCol}>ALU</span>
-        <span className={styles.cBusCol}>C</span>
-        <span className={styles.memCol}>Mem</span>
-        <span className={styles.nextCol}>Next</span>
-        <span className={styles.jamCol}>Jam</span>
+        {bitView ? (
+          <span className={styles.bitsCell} style={{ width: BIT_FIELDS_WIDTH }}>
+            <BitFieldHeader />
+          </span>
+        ) : (
+          <>
+            <span className={styles.aluCol}>ALU</span>
+            <span className={styles.cBusCol}>C</span>
+            <span className={styles.memCol}>Mem</span>
+            <span className={styles.nextCol}>Next</span>
+            <span className={styles.jamCol}>Jam</span>
+          </>
+        )}
       </div>
       <div ref={containerRef} className={styles.listContainer}>
         {size.width > 0 && size.height > 0 && (
@@ -153,7 +275,7 @@ export function ControlStoreView(): JSX.Element {
             ref={listRef}
             width={size.width}
             height={size.height}
-            itemCount={CONTROL_STORE_SIZE}
+            itemCount={items.length}
             itemSize={ROW_HEIGHT}
             itemData={itemData}
           >

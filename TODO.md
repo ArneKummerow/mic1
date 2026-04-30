@@ -117,44 +117,34 @@ default macrocode at first launch is `SAMPLE_RECURSIVE_SUM`.
 
 ## Control store view & microinstruction inspector
 
-- [ ] **Detailed bit-level view toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
-  Add a toggle that switches the table from the current row-per-µinstruction
-  text rendering to a bit-decomposed layout matching Tanenbaum's textbook
-  microinstruction word (36 bits, in this column order):
-  - `NEXT_ADDRESS` (9 bits) — rendered in **hex**, not as individual bits
-  - `JMPC`, `JAMN`, `JAMZ` (3 bits, JAM)
-  - `SLL8`, `SRA1` (2 bits, shifter)
-  - `F0`, `F1`, `ENA`, `ENB`, `INVA`, `INC` (6 bits, ALU)
-  - `H`, `OPC`, `TOS`, `CPP`, `LV`, `SP`, `PC`, `MDR`, `MAR` (9 bits, C-bus enables)
-  - `WRITE`, `READ`, `FETCH` (3 bits, memory ops)
-  - B-bus (4-bit field) — shown by **register name** (`MDR` / `PC` / `MBR` /
-    `MBRU` / `SP` / `LV` / `CPP` / `TOS` / `OPC` / `NONE`), not as raw bits
+The shared bit-level renderer lives in
+[src/components/BitView.tsx](src/components/BitView.tsx) — a single
+`BIT_FIELDS` table drives both the per-row decomposition in the Control
+Store and the dedicated Inspector panel. Each cell carries a tooltip
+describing what the bit does.
 
-  Set bits color-highlighted; cleared bits dim/empty. Column headers are
-  the field names. Toggle state persists with the rest of the UI layout
-  (so the user's preferred view survives a reload). The data is already
-  in [src/engine/types.ts](src/engine/types.ts) — `Microinstruction` carries
-  every field above; this is purely a render mode for the existing rows.
-
-- [ ] **Hide-empty-rows toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
-  A second toggle that filters out unused control-store slots
-  (`controlStore[addr] === undefined`), but still indicates that rows are
-  hidden — either a single dim placeholder row between contiguous spans
-  of populated addresses, or a "… N rows hidden …" marker. Composes with
-  the bit-level view above. When breakpoints are set on hidden addresses,
-  collapse markers should still expose them so they're not invisible.
-
-- [ ] **Microinstruction inspector panel (new tab/pane).** A new layout
-  panel that renders only the *current* microinstruction (the one at
-  `lastTrace.mpcBefore`, falling back to `machine.MPC` before the first
-  step) using the bit-level view above. Default placement: directly
-  below the data-path view, occupying ~20% of vertical space — adjust
-  [src/components/defaultLayout.ts](src/components/defaultLayout.ts).
-  Updates every microcycle as MPC changes. Complements the data-path SVG:
-  one view shows flow through registers/buses, the other shows what the
-  current control word actually encodes. Useful for hovering over the
-  inspector to learn what each control bit does (cross-link to the hover
-  TODO under MAL editor).
+- [x] **Detailed bit-level view toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
+  "Bit view" checkbox in the panel toolbar swaps the row rendering from
+  the textual ALU/C/Mem/Next/Jam columns to the 36-bit decomposition
+  (`NEXT_ADDR` as hex, JAM / shifter / ALU / C-bus / memory as individual
+  bit cells, B-bus as register name). Set bits get a group-coloured
+  background; cleared bits are dim. Toggle state lives on
+  `uiPrefs.controlStoreBitView` in the store and is persisted alongside
+  source code via Zustand `persist`.
+- [x] **Hide-empty-rows toggle in [ControlStoreView](src/components/ControlStoreView.tsx).**
+  "Hide empty rows" checkbox in the same toolbar collapses contiguous
+  empty-slot spans into a single "… N empty rows hidden …" marker. Slots
+  with breakpoints are excluded from the collapse so the user can never
+  lose track of where a breakpoint is set. Composes with the bit view.
+- [x] **Microinstruction inspector panel
+  ([src/components/MicroInspector.tsx](src/components/MicroInspector.tsx)).**
+  New `microInspector` panel placed below the Data Path in the default
+  layout (`mic1-visualizer:layout:v6`) showing the bit-level decomposition
+  of the *current* control word (at `lastTrace.mpcBefore`, falling back to
+  `machine.MPC`). Reuses the same `BitFieldHeader` / `BitFieldRow` shared
+  with the Control Store, so cleaning up that component keeps both views
+  in sync. Hover tooltips on each cell describe the bit (the cross-linked
+  hover-info TODO in the MAL editor section is the natural next step).
 
 ## MAL editor — missing features in [src/components/MicrocodeEditor.tsx](src/components/MicrocodeEditor.tsx)
 

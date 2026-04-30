@@ -22,7 +22,7 @@ export function getDockApi(): DockviewApi | null {
 
 // Bump this when changing the default layout — any cached layout under the
 // old key would otherwise override the new arrangement on existing users.
-export const LAYOUT_STORAGE_KEY = 'mic1-visualizer:layout:v5';
+export const LAYOUT_STORAGE_KEY = 'mic1-visualizer:layout:v6';
 
 /** Restore the bundled default panel arrangement. */
 export function resetLayout(): void {

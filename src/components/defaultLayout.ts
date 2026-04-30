@@ -7,15 +7,17 @@ import type { DockviewApi } from 'dockview-react';
  *   ┌──────────────────┬──────────────────┬──────────────────┐
  *   │  Memory          │                  │                  │
  *   │  Registers       │   Data Path      │  Microcode (MAL) │
- *   │  Stack           │   (only tab)     │  Macrocode (IJVM)│
+ *   │  Stack           │                  │  Macrocode (IJVM)│
  *   ├──────────────────┤                  │  (tabbed)        │
- *   │  Control Store   │                  │                  │
- *   │  Console         │                  │                  │
+ *   │  Control Store   ├──────────────────┤                  │
+ *   │  Console         │ µInst. Inspector │                  │
  *   └──────────────────┴──────────────────┴──────────────────┘
  *
- * Three equal-width columns. Left column has two vertical groups (top:
+ * Three columns. Left column has two vertical groups (top:
  * Memory/Registers/Stack, bottom: Control Store/Console). Middle column
- * holds only Data Path. Right column holds Microcode + Macrocode tabbed.
+ * holds Data Path on top with the Microinstruction Inspector pinned at
+ * the bottom (~20% of the column height). Right column holds Microcode +
+ * Macrocode tabbed.
  */
 export function applyDefaultLayout(api: DockviewApi): void {
   // 1. Establish all three columns first so subsequent vertical splits stay local.
@@ -27,7 +29,7 @@ export function applyDefaultLayout(api: DockviewApi): void {
     title: 'Memory',
   });
 
-  // Middle column: Data Path only.
+  // Middle column: Data Path (top) and Microinstruction Inspector (bottom).
   api.addPanel({
     id: 'dataPath',
     component: 'dataPath',
@@ -50,7 +52,26 @@ export function applyDefaultLayout(api: DockviewApi): void {
     inactive: true,
   });
 
-  // 2. Now split the left column vertically — stays inside the left column
+  // 2. Split the middle column vertically — Microinstruction Inspector
+  //    pinned below the Data Path. Dockview uses 50/50 by default; we
+  //    resize the inspector to roughly 20% of the column height afterwards.
+  api.addPanel({
+    id: 'microInspector',
+    component: 'microInspector',
+    title: 'µInst. Inspector',
+    position: { referencePanel: 'dataPath', direction: 'below' },
+  });
+  // Try to give the data path most of the vertical space.
+  const inspector = api.getPanel('microInspector');
+  if (inspector) {
+    try {
+      inspector.api.setSize({ height: 140 });
+    } catch {
+      // Older dockview versions may not support setSize; default 50/50 is fine.
+    }
+  }
+
+  // 3. Now split the left column vertically — stays inside the left column
   //    because the column boundaries are already established.
   api.addPanel({
     id: 'controlStore',
@@ -66,7 +87,7 @@ export function applyDefaultLayout(api: DockviewApi): void {
     inactive: true,
   });
 
-  // 3. Extra tabs in the left-top group.
+  // 4. Extra tabs in the left-top group.
   api.addPanel({
     id: 'registers',
     component: 'registers',

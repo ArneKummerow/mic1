@@ -90,3 +90,54 @@
   background: var(--error);
   border-color: var(--error);
 }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--fg-2);
+  user-select: none;
+}
+
+.toggle input {
+  margin: 0;
+}
+
+.toolbarSpacer { flex: 1 1 auto; }
+
+.toolbarStat {
+  font-size: 10px;
+  color: var(--fg-3);
+}
+
+.gapRow {
+  font-style: italic;
+  opacity: 0.5;
+}
+
+.gapText {
+  flex: 1 1 auto;
+  font-size: 10px;
+  color: var(--fg-3);
+  text-align: center;
+}
+
+.bitsCell {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+}
