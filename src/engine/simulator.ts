@@ -8,6 +8,7 @@ import {
   type MicroTrace,
   type ShifterOp,
   type WritableRegister,
+  IO_PORT_MAR,
 } from './types';
 
 const DEFAULT_MEMORY_SIZE = 4 * 1024 * 1024; // 4 MiB
@@ -36,6 +37,9 @@ export function createMachineState(memorySize: number = DEFAULT_MEMORY_SIZE): Ma
     pendingPC: 0,
     halted: false,
     error: null,
+    consoleInputBuffer: [],
+    consoleOutputBuffer: [],
+    waitingForInput: false,
   };
 }
 
@@ -47,6 +51,8 @@ export function snapshotMachineState(state: MachineState): MachineState {
   return {
     ...state,
     memory: new Uint8Array(state.memory),
+    consoleInputBuffer: [...state.consoleInputBuffer],
+    consoleOutputBuffer: [...state.consoleOutputBuffer],
   };
 }
 
@@ -134,39 +140,73 @@ function writeRegister(state: MachineState, reg: WritableRegister, value: number
   }
 }
 
-function completePendingMemoryOps(state: MachineState): CompletedMemoryOp[] {
+interface MemoryOpsResult {
+  completed: CompletedMemoryOp[];
+  /**
+   * True if a pending read against the I/O port found the input buffer
+   * empty. The caller (step) should abort this cycle without advancing
+   * MPC; pendingRead/pendingMAR are left in place so the next call retries.
+   */
+  stalledOnInput: boolean;
+}
+
+function completePendingMemoryOps(state: MachineState): MemoryOpsResult {
   const completed: CompletedMemoryOp[] = [];
   const memSize = state.memory.length;
 
   if (state.pendingWrite) {
-    const addr = (state.pendingMAR | 0) * 4;
-    if (addr < 0 || addr + 3 >= memSize) {
-      state.error = `Out-of-bounds memory write at MAR=0x${(state.pendingMAR >>> 0).toString(16)}`;
-      state.halted = true;
+    const word = state.pendingMAR | 0;
+    if (word === IO_PORT_MAR) {
+      // Memory-mapped output port — append low byte of MDR.
+      const byte = state.pendingMDR & 0xff;
+      state.consoleOutputBuffer.push(byte);
+      completed.push({ op: 'write', address: word, value: state.pendingMDR | 0 });
     } else {
-      const v = state.pendingMDR | 0;
-      state.memory[addr] = (v >>> 24) & 0xff;
-      state.memory[addr + 1] = (v >>> 16) & 0xff;
-      state.memory[addr + 2] = (v >>> 8) & 0xff;
-      state.memory[addr + 3] = v & 0xff;
-      completed.push({ op: 'write', address: addr, value: v });
+      const addr = word * 4;
+      if (addr < 0 || addr + 3 >= memSize) {
+        state.error = `Out-of-bounds memory write at MAR=0x${(state.pendingMAR >>> 0).toString(16)}`;
+        state.halted = true;
+      } else {
+        const v = state.pendingMDR | 0;
+        state.memory[addr] = (v >>> 24) & 0xff;
+        state.memory[addr + 1] = (v >>> 16) & 0xff;
+        state.memory[addr + 2] = (v >>> 8) & 0xff;
+        state.memory[addr + 3] = v & 0xff;
+        completed.push({ op: 'write', address: addr, value: v });
+      }
     }
   }
 
   if (state.pendingRead) {
-    const addr = (state.pendingMAR | 0) * 4;
-    if (addr < 0 || addr + 3 >= memSize) {
-      state.error = `Out-of-bounds memory read at MAR=0x${(state.pendingMAR >>> 0).toString(16)}`;
-      state.halted = true;
+    const word = state.pendingMAR | 0;
+    if (word === IO_PORT_MAR) {
+      // Memory-mapped input port — drain a byte if available, else stall.
+      if (state.consoleInputBuffer.length === 0) {
+        state.waitingForInput = true;
+        // Leave pendingRead in place; flush only write/fetch and bail out.
+        state.pendingWrite = false;
+        state.pendingFetch = false;
+        return { completed, stalledOnInput: true };
+      }
+      const byte = state.consoleInputBuffer.shift()! & 0xff;
+      state.MDR = byte;
+      state.waitingForInput = false;
+      completed.push({ op: 'read', address: word, value: byte });
     } else {
-      const word =
-        ((state.memory[addr] << 24) |
-          (state.memory[addr + 1] << 16) |
-          (state.memory[addr + 2] << 8) |
-          state.memory[addr + 3]) |
-        0;
-      state.MDR = word;
-      completed.push({ op: 'read', address: addr, value: word });
+      const addr = word * 4;
+      if (addr < 0 || addr + 3 >= memSize) {
+        state.error = `Out-of-bounds memory read at MAR=0x${(state.pendingMAR >>> 0).toString(16)}`;
+        state.halted = true;
+      } else {
+        const wordVal =
+          ((state.memory[addr] << 24) |
+            (state.memory[addr + 1] << 16) |
+            (state.memory[addr + 2] << 8) |
+            state.memory[addr + 3]) |
+          0;
+        state.MDR = wordVal;
+        completed.push({ op: 'read', address: addr, value: wordVal });
+      }
     }
   }
 
@@ -184,7 +224,7 @@ function completePendingMemoryOps(state: MachineState): CompletedMemoryOp[] {
   state.pendingRead = false;
   state.pendingWrite = false;
   state.pendingFetch = false;
-  return completed;
+  return { completed, stalledOnInput: false };
 }
 
 function computeNextMpc(
@@ -227,8 +267,12 @@ export function step(state: MachineState): MicroTrace {
   }
 
   // 1. Memory ops from the previous cycle.
-  const memoryOpsCompleted = completePendingMemoryOps(state);
-  if (state.halted) {
+  const memResult = completePendingMemoryOps(state);
+  const memoryOpsCompleted = memResult.completed;
+  if (state.halted || memResult.stalledOnInput) {
+    // Either a fault halted us, or `IN` is waiting on an empty input buffer.
+    // In the stall case MPC is intentionally left unchanged so the same
+    // microinstruction re-runs once input arrives.
     return {
       microinstructionAddress: mpcBefore,
       microinstruction: instr,

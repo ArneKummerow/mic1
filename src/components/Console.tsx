@@ -6,11 +6,12 @@ import styles from './Console.module.css';
  * Console panel — output buffer fed by the IJVM `OUT` instruction; input
  * buffer fed to `IN`.
  *
- * Note (v1): The default microprogram does not yet implement `IN`/`OUT`
- * handlers. The UI is fully wired to the store's `consoleOutput` /
- * `consoleInput` slices, but no characters will appear in Output until the
- * `OUT` microcode handler is added (and its memory-mapped sink hooked into
- * `store.microstep`). The Input field appends to the input buffer regardless.
+ * Both are wired through the memory-mapped I/O port at `MAR = -1`: `OUT`
+ * writes the low byte of `MDR`, which the simulator drains into
+ * `machine.consoleOutputBuffer` and the store appends to `consoleOutput`.
+ * `IN` reads a byte from `machine.consoleInputBuffer`; if the buffer is
+ * empty, the simulator stalls and the store transitions to
+ * `'waiting-for-input'` until `appendConsoleInput` pushes a byte.
  */
 export function Console(): JSX.Element {
   const consoleOutput = useAppStore((s) => s.consoleOutput);

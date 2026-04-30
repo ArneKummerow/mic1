@@ -92,6 +92,12 @@ interface RawInstruction {
   method: MutableMethod | null;
   /** Byte address of this instruction's first byte. */
   address: number;
+  /**
+   * True if this instruction is folded under a preceding `WIDE` byte. Only
+   * meaningful for `ILOAD`/`ISTORE`/`IINC`: their local-variable index is
+   * encoded as a 16-bit big-endian word instead of an 8-bit byte.
+   */
+  wide: boolean;
 }
 
 type OperandToken =
@@ -126,6 +132,14 @@ export function assembleIJVM(source: string): IJVMAssembleResult {
   // Methods seen so far. The currently open one (if any) tracks state across lines.
   const methods = new Map<string, MutableMethod>();
   let currentMethod: MutableMethod | null = null;
+
+  /**
+   * Set true when the most-recently-laid-out instruction was `WIDE` (0xC4).
+   * The next ILOAD/ISTORE/IINC that follows is folded into a wide-encoded
+   * instruction (16-bit local-variable index).
+   */
+  let widePending = false;
+  let widePendingFrom: { line: number; column: number } | null = null;
 
   const registerConstant = (
     name: string,
@@ -258,15 +272,8 @@ export function assembleIJVM(source: string): IJVMAssembleResult {
             });
           } else {
             currentMethod.vars.push(d.name);
-            const idx = 1 + currentMethod.args.length + currentMethod.vars.length - 1;
-            if (idx > 0xff) {
-              // Indices over 0xFF require WIDE; warn but allow.
-              errors.push({
-                line: d.line,
-                column: d.column,
-                message: `Local index ${idx} for '${d.name}' exceeds 0xFF — requires WIDE prefix at use sites (not yet supported by the assembler)`,
-              });
-            }
+            // Indices > 0xFF are fine — uses must be `WIDE`-prefixed. Per-use
+            // validation lives in encodeOperand.
           }
           break;
         }
@@ -337,6 +344,21 @@ export function assembleIJVM(source: string): IJVMAssembleResult {
     addressByLine.set(lineNum, address);
     if (!lineByAddress.has(address)) lineByAddress.set(address, lineNum);
 
+    let wide = false;
+    if (widePending) {
+      if (info.mnemonic === 'ILOAD' || info.mnemonic === 'ISTORE' || info.mnemonic === 'IINC') {
+        wide = true;
+      } else {
+        errors.push({
+          line: widePendingFrom!.line,
+          column: widePendingFrom!.column,
+          message: `WIDE must be followed by ILOAD, ISTORE, or IINC (got ${info.mnemonic})`,
+        });
+      }
+      widePending = false;
+      widePendingFrom = null;
+    }
+
     instructions.push({
       line: lineNum,
       column: scan.mnemonicColumn ?? 1,
@@ -344,12 +366,26 @@ export function assembleIJVM(source: string): IJVMAssembleResult {
       operandTokens: scan.operandTokens,
       method: currentMethod,
       address,
+      wide,
     });
-    address += instructionSize(info);
+    address += wide ? wideInstructionSize(info) : instructionSize(info);
+
+    if (info.mnemonic === 'WIDE') {
+      widePending = true;
+      widePendingFrom = { line: lineNum, column: scan.mnemonicColumn ?? 1 };
+    }
   }
 
   // Trailing pending labels point past the last instruction.
   flushPendingLabels(pendingLabels, labels, address, errors);
+
+  if (widePending && widePendingFrom !== null) {
+    errors.push({
+      line: widePendingFrom.line,
+      column: widePendingFrom.column,
+      message: `WIDE not followed by ILOAD, ISTORE, or IINC`,
+    });
+  }
 
   if (currentMethod !== null) {
     errors.push({
@@ -407,18 +443,20 @@ export function assembleIJVM(source: string): IJVMAssembleResult {
         labels,
         constantsByName,
       );
-      if ('error' in enc) {
-        errors.push(enc.error);
-      } else {
-        const len = sizeOfKind(kind);
+      // Under WIDE, the first ubyte operand widens to 2 bytes (big-endian).
+      const widenThis = inst.wide && opIdx === 0 && kind === 'ubyte';
+      const len = widenThis ? 2 : sizeOfKind(kind);
+      if (!('error' in enc)) {
         if (len === 1) {
           bytes[pos] = enc.value & 0xff;
         } else {
           bytes[pos] = (enc.value >> 8) & 0xff;
           bytes[pos + 1] = enc.value & 0xff;
         }
+      } else {
+        errors.push(enc.error);
       }
-      pos += sizeOfKind(kind);
+      pos += len;
     }
   }
 
@@ -458,6 +496,23 @@ function sizeOfKind(kind: OperandKind): number {
   return kind === 'sbyte' || kind === 'ubyte' ? 1 : 2;
 }
 
+/**
+ * Size of an ILOAD/ISTORE/IINC under a `WIDE` prefix: the leading `ubyte`
+ * index becomes a 2-byte word; other operand kinds keep their normal size.
+ */
+function wideInstructionSize(info: OpcodeInfo): number {
+  let size = 1; // opcode byte
+  for (let i = 0; i < info.operandKinds.length; i++) {
+    const k = info.operandKinds[i];
+    // First operand is the local-variable index (originally `ubyte`); under
+    // WIDE it widens to 2 bytes. Subsequent operands (e.g. IINC's sbyte
+    // const) keep their normal size.
+    if (i === 0 && k === 'ubyte') size += 2;
+    else size += sizeOfKind(k);
+  }
+  return size;
+}
+
 interface OperandValue {
   value: number;
 }
@@ -483,10 +538,13 @@ function encodeOperand(
             : `Unknown local '${tok.name}' (no .method context)`,
         );
       }
-      if (idx > 0xff) {
+      const ceiling = inst.wide ? 0xffff : 0xff;
+      if (idx > ceiling) {
         return errorAt(
           tok,
-          `Local index ${idx} for '${tok.name}' exceeds 0xFF (would need WIDE)`,
+          inst.wide
+            ? `Local index ${idx} for '${tok.name}' exceeds 0xFFFF`
+            : `Local index ${idx} for '${tok.name}' exceeds 0xFF (use WIDE prefix)`,
         );
       }
       return { value: idx };
@@ -523,8 +581,15 @@ function encodeOperand(
     return { value: tok.value & 0xff };
   }
   if (kind === 'ubyte') {
-    if (tok.value < 0 || tok.value > 255) {
-      return errorAt(tok, `Unsigned byte out of range: ${tok.value}`);
+    const widenThis = inst.wide && opIdx === 0 && isLocalRefMnemonic(info.mnemonic);
+    const max = widenThis ? 0xffff : 0xff;
+    if (tok.value < 0 || tok.value > max) {
+      return errorAt(
+        tok,
+        widenThis
+          ? `Unsigned word out of range: ${tok.value}`
+          : `Unsigned byte out of range: ${tok.value}`,
+      );
     }
     if (isLocalRefMnemonic(info.mnemonic) && inst.method !== null) {
       const declared = inst.method.args.length + inst.method.vars.length; // excludes OBJREF slot 0

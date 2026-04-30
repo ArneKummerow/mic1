@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createMachineState, step } from './simulator';
+import { createMachineState, snapshotMachineState, step } from './simulator';
 import type { AluControl, MachineState, Microinstruction, WritableRegister } from './types';
 
 // Test helpers ────────────────────────────────────────────────────────────
@@ -339,5 +339,73 @@ describe('simulator: error states', () => {
     const state = createMachineState(64);
     state.halted = true;
     expect(() => step(state)).toThrow(/halted/i);
+  });
+});
+
+describe('simulator: snapshotMachineState', () => {
+  it('deep-copies memory and console buffers (independent of original)', () => {
+    const original = createMachineState(64);
+    original.memory[0] = 0x42;
+    original.consoleInputBuffer.push(0x41);
+    original.consoleOutputBuffer.push(0x42);
+    original.PC = 7;
+    original.waitingForInput = true;
+
+    const snap = snapshotMachineState(original);
+    // Mutate the original; the snapshot should be unaffected.
+    original.memory[0] = 0x00;
+    original.consoleInputBuffer.push(0x99);
+    original.consoleOutputBuffer.push(0x99);
+    original.PC = 0;
+    original.waitingForInput = false;
+
+    expect(snap.memory[0]).toBe(0x42);
+    expect(snap.consoleInputBuffer).toEqual([0x41]);
+    expect(snap.consoleOutputBuffer).toEqual([0x42]);
+    expect(snap.PC).toBe(7);
+    expect(snap.waitingForInput).toBe(true);
+  });
+});
+
+describe('simulator: memory-mapped I/O', () => {
+  it('rd at MAR=-1 drains a byte from consoleInputBuffer into MDR', () => {
+    const state = createMachineState(64);
+    // One-instruction program: rd at MAR=-1; we set up the pending read
+    // directly to exercise completePendingMemoryOps.
+    state.controlStore = [uinstr({ nextAddress: 0 })];
+    state.MAR = -1;
+    state.pendingMAR = -1;
+    state.pendingRead = true;
+    state.consoleInputBuffer.push(0xab);
+    step(state);
+    expect(state.MDR).toBe(0xab);
+    expect(state.consoleInputBuffer.length).toBe(0);
+    expect(state.waitingForInput).toBe(false);
+  });
+
+  it('rd at MAR=-1 with empty buffer stalls (waitingForInput=true, MPC unchanged)', () => {
+    const state = createMachineState(64);
+    state.controlStore = [
+      uinstr({ nextAddress: 0x42 }),
+      // 0x42 unused — the stall should keep MPC at 0.
+    ];
+    state.controlStore = [...state.controlStore, ...new Array(0x60).fill(uinstr())];
+    state.MAR = -1;
+    state.pendingMAR = -1;
+    state.pendingRead = true;
+    const trace = step(state);
+    expect(state.waitingForInput).toBe(true);
+    expect(state.pendingRead).toBe(true); // still pending — will retry
+    expect(trace.mpcAfter).toBe(trace.mpcBefore); // no advance
+  });
+
+  it('wr at MAR=-1 appends MDR\'s low byte to consoleOutputBuffer', () => {
+    const state = createMachineState(64);
+    state.controlStore = [uinstr({ nextAddress: 0 })];
+    state.pendingMAR = -1;
+    state.pendingMDR = 0x12345678;
+    state.pendingWrite = true;
+    step(state);
+    expect(state.consoleOutputBuffer).toEqual([0x78]);
   });
 });

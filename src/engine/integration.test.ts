@@ -4,6 +4,13 @@ import { assembleMicrocode } from './mal';
 import { assembleIJVM } from './ijvm';
 import { DEFAULT_MICROCODE } from './defaultMicrocode';
 import { DEFAULT_MACROCODE } from './defaultMacrocode';
+import {
+  IJVM_SAMPLES,
+  SAMPLE_RECURSIVE_SUM,
+  SAMPLE_SUM_LOOP,
+  SAMPLE_ECHO,
+  SAMPLE_WIDE,
+} from './ijvm';
 
 const STACK_BASE_WORD = 0x100; // word index where pushed values land first
 const LV_WORD = 0xc0; // local-variable frame base (clear of the method area)
@@ -75,14 +82,14 @@ describe('integration: full pipeline', () => {
     expect(r.errors).toEqual([]);
   });
 
-  it('default program (sum 1..10) leaves 55 on TOS and halts', () => {
+  it('default program (recursive sum 1..10) leaves 55 on TOS and halts', () => {
     const micro = assembleMicrocode(DEFAULT_MICROCODE);
     const ijvm = assembleIJVM(DEFAULT_MACROCODE);
     expect(micro.errors).toEqual([]);
     expect(ijvm.errors).toEqual([]);
 
-    const state = bootstrap(micro.controlStore, ijvm.bytes);
-    const { halted } = runToHalt(state, 5000);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 20000);
 
     expect(halted).toBe(true);
     expect(state.TOS).toBe(55);
@@ -591,6 +598,93 @@ describe('integration: INVOKEVIRTUAL / IRETURN', () => {
   });
 });
 
+describe('integration: IN / OUT', () => {
+  it('OUT pops a byte and appends to consoleOutputBuffer', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+      BIPUSH 0x48          // 'H'
+      OUT
+      BIPUSH 0x69          // 'i'
+      OUT
+      HALT
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes);
+    const { halted } = runToHalt(state, 5000);
+    expect(halted).toBe(true);
+    expect(String.fromCharCode(...state.consoleOutputBuffer)).toBe('Hi');
+    // Stack should be drained back to its initial state.
+    expect(state.SP).toBe(STACK_BASE_WORD - 1);
+  });
+
+  it('IN reads a byte from consoleInputBuffer', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+      IN
+      HALT
+    `);
+    const state = bootstrap(micro.controlStore, ijvm.bytes);
+    state.consoleInputBuffer.push(0x41); // 'A'
+    const { halted } = runToHalt(state, 5000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(0x41);
+    // Buffer drained.
+    expect(state.consoleInputBuffer.length).toBe(0);
+  });
+
+  it('IN with empty buffer stalls (waitingForInput=true, MPC unchanged)', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+      IN
+      HALT
+    `);
+    const state = bootstrap(micro.controlStore, ijvm.bytes);
+    // Run far enough that IN's rd-completion cycle stalls.
+    let lastMpc = state.MPC;
+    let stalledFor = 0;
+    for (let i = 0; i < 200; i++) {
+      const trace = step(state);
+      if (state.waitingForInput) {
+        // Once stalled, MPC should remain the same across repeated steps.
+        if (lastMpc === trace.mpcBefore && trace.mpcAfter === trace.mpcBefore) {
+          stalledFor++;
+          if (stalledFor > 3) break;
+        }
+        lastMpc = trace.mpcBefore;
+      }
+    }
+    expect(state.waitingForInput).toBe(true);
+    expect(state.halted).toBe(false);
+    // Now feed input — the next step should drain it.
+    state.consoleInputBuffer.push(0x5a); // 'Z'
+    const { halted } = runToHalt(state, 1000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(0x5a);
+    expect(state.waitingForInput).toBe(false);
+  });
+
+  it('echo loop: IN/OUT until null byte', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(`
+      loop:
+        IN
+        DUP
+        IFEQ done    // exit on null byte
+        OUT
+        GOTO loop
+      done:
+        HALT
+    `);
+    expect(ijvm.errors).toEqual([]);
+    const state = bootstrap(micro.controlStore, ijvm.bytes);
+    // Pre-feed "Hi!" + null terminator.
+    for (const c of [0x48, 0x69, 0x21, 0x00]) state.consoleInputBuffer.push(c);
+    const { halted } = runToHalt(state, 20000);
+    expect(halted).toBe(true);
+    expect(String.fromCharCode(...state.consoleOutputBuffer)).toBe('Hi!');
+  });
+});
+
 describe('integration: WIDE prefix', () => {
   it('WIDE ILOAD reads a 16-bit local index', () => {
     const micro = assembleMicrocode(DEFAULT_MICROCODE);
@@ -644,5 +738,56 @@ describe('integration: WIDE prefix', () => {
     const { halted } = runToHalt(state, 2000);
     expect(halted).toBe(true);
     expect(state.TOS).toBe(6);
+  });
+});
+
+describe('integration: bundled samples', () => {
+  it('every sample in IJVM_SAMPLES assembles without errors', () => {
+    for (const sample of IJVM_SAMPLES) {
+      const r = assembleIJVM(sample.source);
+      if (r.errors.length > 0) {
+        const msg = r.errors
+          .map((e) => `  ${e.line}:${e.column} ${e.message}`)
+          .join('\n');
+        throw new Error(`Sample '${sample.id}' failed to assemble:\n${msg}`);
+      }
+    }
+  });
+
+  it('SAMPLE_RECURSIVE_SUM computes 55 for N=10', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_RECURSIVE_SUM);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 20000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(55);
+  });
+
+  it('SAMPLE_SUM_LOOP computes 55 for N=10', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_SUM_LOOP);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 5000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(55);
+  });
+
+  it('SAMPLE_ECHO echoes pre-fed input until null byte', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_ECHO);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    for (const c of [0x4d, 0x69, 0x63, 0x21, 0x00]) state.consoleInputBuffer.push(c);
+    const { halted } = runToHalt(state, 30000);
+    expect(halted).toBe(true);
+    expect(String.fromCharCode(...state.consoleOutputBuffer)).toBe('Mic!');
+  });
+
+  it('SAMPLE_WIDE bumpAndAdd(100) returns 100 + (100 + 5) = 205', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_WIDE);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 10000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(205);
   });
 });

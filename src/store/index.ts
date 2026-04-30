@@ -13,7 +13,7 @@
 
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
-import { step } from '../engine/simulator';
+import { step, snapshotMachineState } from '../engine/simulator';
 import type { MachineState, MicroTrace } from '../engine/types';
 import type { AssembleResult } from '../engine/mal';
 import type { IJVMAssembleResult } from '../engine/ijvm';
@@ -26,6 +26,21 @@ export type ExecutionMode = 'paused' | 'running' | 'halted' | 'error' | 'waiting
 
 /** Speed (microsteps per second) above which we suppress data-path animation. */
 export const TURBO_THRESHOLD = 200;
+
+/**
+ * Maximum number of micro-cycle snapshots retained for step-back/undo.
+ * Each snapshot deep-copies `machine.memory` (default 64 KiB), so the
+ * cap also bounds the persistent footprint.
+ */
+export const STEP_BACK_HISTORY_SIZE = 128;
+
+interface HistoryEntry {
+  machine: MachineState;
+  consoleOutput: string;
+  consoleInput: string;
+  currentOpcodeAddress: number;
+  lastTrace: MicroTrace | null;
+}
 
 export interface AppState {
   // Source (persisted).
@@ -63,12 +78,19 @@ export interface AppState {
   // detect changes despite the Uint8Array reference being stable.
   tick: number;
 
+  /** Number of step-back snapshots currently retained. */
+  historyDepth: number;
+
   // Actions.
   setMicrocode: (text: string) => void;
   setMacrocode: (text: string) => void;
   reset: () => void;
   microstep: () => void;
   macrostep: () => void;
+  /** Pop the latest snapshot and restore the machine to that state. */
+  stepBack: () => void;
+  /** Pop snapshots until the most-recent Main1 dispatch boundary. */
+  macrostepBack: () => void;
   run: () => void;
   pause: () => void;
   setSpeed: (speed: number) => void;
@@ -87,6 +109,24 @@ const stopInterval = (): void => {
     runIntervalHandle = null;
   }
 };
+
+/**
+ * Ring buffer of pre-step snapshots. Module-scoped (rather than living in
+ * the store) so the (potentially-large) deep-copied memory arrays don't
+ * trigger Zustand subscribers on every step.
+ */
+const history: HistoryEntry[] = [];
+
+function pushHistory(entry: HistoryEntry): void {
+  history.push(entry);
+  if (history.length > STEP_BACK_HISTORY_SIZE) {
+    history.shift();
+  }
+}
+
+function clearHistory(): void {
+  history.length = 0;
+}
 
 const initial = bootstrap(DEFAULT_MICROCODE, DEFAULT_MACROCODE);
 
@@ -108,6 +148,7 @@ export const useAppStore = create<AppState>()(
         consoleInput: '',
         currentOpcodeAddress: 0,
         tick: 0,
+        historyDepth: 0,
 
         setMicrocode: (text) => {
           set({ microcode: text });
@@ -118,6 +159,7 @@ export const useAppStore = create<AppState>()(
 
         reset: () => {
           stopInterval();
+          clearHistory();
           const { microcode, macrocode } = get();
           const fresh = bootstrap(microcode, macrocode);
           set({
@@ -131,6 +173,7 @@ export const useAppStore = create<AppState>()(
             consoleInput: '',
             currentOpcodeAddress: fresh.machine.PC,
             tick: get().tick + 1,
+            historyDepth: 0,
           });
         },
 
@@ -140,28 +183,57 @@ export const useAppStore = create<AppState>()(
             set({ mode: 'halted' });
             return;
           }
+          // Snapshot before mutating, so step-back can rewind one cycle.
+          // The deep-copy is bounded by STEP_BACK_HISTORY_SIZE entries.
+          pushHistory({
+            machine: snapshotMachineState(machine),
+            consoleOutput: get().consoleOutput,
+            consoleInput: get().consoleInput,
+            currentOpcodeAddress: get().currentOpcodeAddress,
+            lastTrace: get().lastTrace,
+          });
           try {
             const trace = step(machine);
-            const newMode: ExecutionMode =
-              machine.halted || trace.mpcAfter === trace.mpcBefore
-                ? 'halted'
-                : breakpoints.has(trace.mpcAfter)
-                  ? 'paused'
-                  : get().mode === 'running'
-                    ? 'running'
-                    : 'paused';
+            // Drain any bytes emitted by OUT into the UI-facing string.
+            let appendedOutput = '';
+            if (machine.consoleOutputBuffer.length > 0) {
+              appendedOutput = String.fromCharCode(...machine.consoleOutputBuffer);
+              machine.consoleOutputBuffer.length = 0;
+            }
+            const wasStalled = trace.mpcAfter === trace.mpcBefore && machine.waitingForInput;
+            const newMode: ExecutionMode = machine.halted
+              ? 'halted'
+              : machine.waitingForInput
+                ? 'waiting-for-input'
+                : trace.mpcAfter === trace.mpcBefore
+                  ? 'halted'
+                  : breakpoints.has(trace.mpcAfter)
+                    ? 'paused'
+                    : get().mode === 'running' || get().mode === 'waiting-for-input'
+                      ? 'running'
+                      : 'paused';
             // A Main1 dispatch (MPC 0 → opcode handler) means a new IJVM
             // instruction is about to be processed; PC at this moment is the
             // byte address of that opcode.
             const dispatchedNew = trace.mpcBefore === 0 && trace.mpcAfter !== 0;
+            // Mirror the post-step input buffer back to the UI-facing
+            // string. The simulator may have drained bytes from it.
+            const inputView = String.fromCharCode(...machine.consoleInputBuffer);
             set({
               machine: { ...machine },
               lastTrace: trace,
               mode: newMode,
               tick: get().tick + 1,
+              historyDepth: history.length,
+              consoleInput: inputView,
+              ...(appendedOutput && { consoleOutput: get().consoleOutput + appendedOutput }),
               ...(dispatchedNew ? { currentOpcodeAddress: machine.PC } : {}),
               ...(machine.halted && machine.error ? { errorMessage: machine.error } : {}),
             });
+            // If we just transitioned into a stall, the run-loop callback
+            // will see `mode !== 'running'` next tick and stop itself; no
+            // explicit cleanup needed here.
+            void wasStalled;
           } catch (err) {
             set({
               mode: 'error',
@@ -182,6 +254,56 @@ export const useAppStore = create<AppState>()(
             if (machine.halted || mode !== 'paused' && mode !== 'running') break;
             if (machine.MPC === 0) break;
           }
+        },
+
+        stepBack: () => {
+          stopInterval();
+          const entry = history.pop();
+          if (entry === undefined) return;
+          // The popped MachineState is itself a snapshot; reuse its memory
+          // directly (no further clone needed — the entry is now consumed).
+          set({
+            machine: entry.machine,
+            lastTrace: entry.lastTrace,
+            consoleOutput: entry.consoleOutput,
+            consoleInput: entry.consoleInput,
+            currentOpcodeAddress: entry.currentOpcodeAddress,
+            mode: entry.machine.halted
+              ? 'halted'
+              : entry.machine.waitingForInput
+                ? 'waiting-for-input'
+                : 'paused',
+            errorMessage: entry.machine.error,
+            tick: get().tick + 1,
+            historyDepth: history.length,
+          });
+        },
+
+        macrostepBack: () => {
+          stopInterval();
+          // Pop one snapshot at a time; stop when we land on a state where
+          // MPC == 0 (i.e. just before a Main1 dispatch — the start of an
+          // IJVM instruction).
+          let entry = history.pop();
+          while (entry !== undefined && entry.machine.MPC !== 0) {
+            entry = history.pop();
+          }
+          if (entry === undefined) return;
+          set({
+            machine: entry.machine,
+            lastTrace: entry.lastTrace,
+            consoleOutput: entry.consoleOutput,
+            consoleInput: entry.consoleInput,
+            currentOpcodeAddress: entry.currentOpcodeAddress,
+            mode: entry.machine.halted
+              ? 'halted'
+              : entry.machine.waitingForInput
+                ? 'waiting-for-input'
+                : 'paused',
+            errorMessage: entry.machine.error,
+            tick: get().tick + 1,
+            historyDepth: history.length,
+          });
         },
 
         run: () => {
@@ -220,7 +342,26 @@ export const useAppStore = create<AppState>()(
         },
 
         clearConsoleOutput: () => set({ consoleOutput: '' }),
-        appendConsoleInput: (s) => set({ consoleInput: get().consoleInput + s }),
+        appendConsoleInput: (s) => {
+          // Push char codes into the machine's input buffer so `IN`'s
+          // memory-mapped read can drain them. The store's `consoleInput`
+          // string mirrors the buffer (bytes still pending consumption).
+          const machine = get().machine;
+          for (let i = 0; i < s.length; i++) {
+            machine.consoleInputBuffer.push(s.charCodeAt(i) & 0xff);
+          }
+          const wasWaiting = get().mode === 'waiting-for-input';
+          set({
+            consoleInput: String.fromCharCode(...machine.consoleInputBuffer),
+            machine: { ...machine },
+            tick: get().tick + 1,
+          });
+          // If we were stalled in IN, resume the run-loop so the rd cycle
+          // gets retried with the now-non-empty buffer.
+          if (wasWaiting) {
+            get().run();
+          }
+        },
 
         resetToDefaults: () => {
           set({ microcode: DEFAULT_MICROCODE, macrocode: DEFAULT_MACROCODE });

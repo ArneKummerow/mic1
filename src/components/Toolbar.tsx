@@ -4,6 +4,8 @@ import {
   Play,
   RotateCcw,
   StepForward,
+  StepBack,
+  Rewind,
   FastForward,
   AlertTriangle,
   Square,
@@ -12,6 +14,7 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
+import { IJVM_SAMPLES } from '../engine/ijvm';
 import { resetLayout } from './layoutApi';
 import styles from './Toolbar.module.css';
 
@@ -26,10 +29,14 @@ export function Toolbar(): JSX.Element {
 
   const microstep = useAppStore((s) => s.microstep);
   const macrostep = useAppStore((s) => s.macrostep);
+  const stepBack = useAppStore((s) => s.stepBack);
+  const macrostepBack = useAppStore((s) => s.macrostepBack);
+  const historyDepth = useAppStore((s) => s.historyDepth);
   const run = useAppStore((s) => s.run);
   const pause = useAppStore((s) => s.pause);
   const reset = useAppStore((s) => s.reset);
   const setSpeed = useAppStore((s) => s.setSpeed);
+  const setMacrocode = useAppStore((s) => s.setMacrocode);
   const resetToDefaults = useAppStore((s) => s.resetToDefaults);
   const copyShareUrl = useAppStore((s) => s.copyShareUrl);
 
@@ -51,10 +58,26 @@ export function Toolbar(): JSX.Element {
     resetLayout();
   };
 
+  const handleSampleChoice = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    const id = e.target.value;
+    e.target.value = ''; // reset so the same sample can be re-selected later
+    if (!id) return;
+    const sample = IJVM_SAMPLES.find((s) => s.id === id);
+    if (!sample) return;
+    if (
+      confirm(
+        `Replace the current IJVM source with the "${sample.label}" sample?\n\n${sample.description}\n\nYour current IJVM code will be lost.`,
+      )
+    ) {
+      setMacrocode(sample.source);
+    }
+  };
+
   const isRunning = mode === 'running';
   const isHalted = mode === 'halted' || machineHalted;
   const hasErrors = errorCount > 0;
   const canStep = !isRunning && !isHalted && !hasErrors;
+  const canStepBack = !isRunning && historyDepth > 0;
 
   const handleRunPause = (): void => {
     if (isRunning) pause();
@@ -72,6 +95,24 @@ export function Toolbar(): JSX.Element {
         >
           {isRunning ? <Pause size={14} /> : <Play size={14} />}
           <span>{isRunning ? 'Pause' : 'Run'}</span>
+        </button>
+        <button
+          onClick={macrostepBack}
+          disabled={!canStepBack}
+          title={`Step IJVM instruction back${historyDepth > 0 ? ` (history: ${historyDepth})` : ''}`}
+          aria-label="Step IJVM back"
+        >
+          <Rewind size={14} />
+          <span>◀ IJVM</span>
+        </button>
+        <button
+          onClick={stepBack}
+          disabled={!canStepBack}
+          title="Microstep back"
+          aria-label="Microstep back"
+        >
+          <StepBack size={14} />
+          <span>◀ µ</span>
         </button>
         <button onClick={microstep} disabled={!canStep} title="Microstep (F11)">
           <StepForward size={14} />
@@ -108,6 +149,22 @@ export function Toolbar(): JSX.Element {
           <Share2 size={14} />
           <span>{shareFlash ? 'Copied!' : 'Share'}</span>
         </button>
+        <select
+          className={styles.sampleSelect}
+          onChange={handleSampleChoice}
+          defaultValue=""
+          title="Load a bundled IJVM sample into the macrocode editor"
+          aria-label="Load IJVM sample"
+        >
+          <option value="" disabled>
+            Sample…
+          </option>
+          {IJVM_SAMPLES.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
         <button onClick={handleResetDefaults} title="Restore the bundled default microcode and macrocode">
           <FileText size={14} />
           <span>Defaults</span>

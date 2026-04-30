@@ -76,6 +76,8 @@ ireturn1    = 0x0AC   MAR = LV; rd;                 goto ireturn2
 ior1        = 0x0B0   MAR = SP = SP - 1; rd;        goto ior2
 invokev1    = 0x0B6   PC = PC + 1; fetch;           goto invokev2
 wide1       = 0x0C4   PC = PC + 1; fetch;           goto wide2
+in1         = 0x0FC   MAR = -1; rd;                 goto in2
+out1        = 0x0FD   MDR = TOS;                    goto out2
 err1        = 0x0FE   goto err1
 halt1       = 0x0FF   goto halt1
 
@@ -299,4 +301,20 @@ wide_iinc1 = 0x184    PC = PC + 1; fetch;             goto wide_iinc2
 // WIDE second-stage dispatch. The 1-cycle fetch delay means the byte
 // fetched at wide1 is in MBR by this cycle; we dispatch on it now.
 wide2 = 0x185         goto (MBR OR 0x100)
+
+// IN — read a byte from the memory-mapped console input port (MAR = -1)
+// and push it as a 32-bit word. If the input buffer is empty, the
+// simulator stalls (sets waitingForInput) until input arrives, then
+// re-runs the rd-completion cycle.
+in2 = 0x1F8           MAR = SP = SP + 1            // alloc TOS slot
+in3                   wr                            // write input byte to TOS slot
+in4                   PC = PC + 1; fetch            // advance, fetch next opcode
+in5                   TOS = MDR; goto Main1         // cache new TOS
+
+// OUT — pop the top byte and append it to the console output buffer via
+// the memory-mapped output port (also MAR = -1; write side).
+out2 = 0x1FC          MAR = -1; wr                  // write MDR's low byte to output port
+out3                  MAR = SP = SP - 1; rd          // pop, fetch new top
+out4                  PC = PC + 1; fetch
+out5                  TOS = MDR; goto Main1
 `.trim();

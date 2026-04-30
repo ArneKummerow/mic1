@@ -62,42 +62,58 @@ ISTORE.
   `wide_iload` (`0x115..0x11C`), `wide_istore` (`0x136..0x13E`),
   `wide_iinc` (entry `0x184`, continuation `0x1B5..0x1BC`). Each reads a
   16-bit index across two operand bytes.
-- [ ] **`IN` (0xFC).** Read a byte from the console input buffer; push 0 if
-  the buffer is empty (or stall — see simulator section). Needs memory-
-  mapped I/O wiring on the simulator side.
-- [ ] **`OUT` (0xFD).** Pop a byte and append it to the console output
-  buffer. Same I/O wiring.
+- [x] **`IN` (0xFC).** Reads a byte from the memory-mapped input port at
+  `MAR = -1`. If the input buffer is empty, the simulator sets
+  `waitingForInput=true` and leaves `pendingRead` in place, stalling MPC
+  until input arrives. Entry at `0x0FC`, continuation at `0x1F8..0x1FB`.
+- [x] **`OUT` (0xFD).** Pops a byte and writes it to the memory-mapped
+  output port (also `MAR = -1`); the simulator drains
+  `consoleOutputBuffer` into the store's `consoleOutput` string. Entry at
+  `0x0FD`, continuation at `0x1FC..0x1FF`.
 
 ## Simulator — I/O and other gaps
 
-- [ ] **Memory-mapped console I/O.** Pick reserved word addresses (e.g.
-  `0xFFFFFFFC` for input, `0xFFFFFFFE` for output) and special-case them
-  in `completePendingMemoryOps` ([src/engine/simulator.ts](src/engine/simulator.ts))
-  to drain `consoleInput` / append to `consoleOutput` instead of reading /
-  writing main memory. Wire the store so the simulator can call back into
-  it when `IN` / `OUT` execute.
-- [ ] **`waiting-for-input` mode is declared but never entered.** The
-  store has `'waiting-for-input'` as an `ExecutionMode` and the Console
-  shows "waiting for input…" when active, but nothing transitions into
-  it. When `IN` reads from an empty buffer, microstep should pause the
-  run-loop and resume on the next `appendConsoleInput`.
-- [ ] **Step-back / undo.** Listed under "Stretch" in the previous TODO —
-  ring-buffer of `MachineState` snapshots so the user can rewind one
-  micro-cycle (or one macro-instruction) at a time. `snapshotMachineState`
-  already exists in [src/engine/simulator.ts](src/engine/simulator.ts).
+- [x] **Memory-mapped console I/O.** Implemented at the single sentinel
+  word address `MAR = -1` (`IO_PORT_MAR`): `rd` drains a byte from
+  `machine.consoleInputBuffer`, `wr` appends the low byte of `MDR` to
+  `machine.consoleOutputBuffer`. `completePendingMemoryOps` in
+  [src/engine/simulator.ts](src/engine/simulator.ts) intercepts both
+  before the bounds check. The store mirrors the buffers into its
+  UI-facing `consoleInput` / `consoleOutput` strings on each microstep.
+- [x] **`waiting-for-input` mode entered on empty IN.** When the input
+  buffer is empty, `completePendingMemoryOps` sets
+  `state.waitingForInput=true`, leaves `pendingRead` in place, and the
+  outer `step()` returns a no-op trace at the same MPC. The store
+  transitions the mode and pauses the run-loop; `appendConsoleInput`
+  pushes bytes and re-arms `run()` so the rd cycle is retried.
+- [x] **Step-back / undo.** The store keeps a 128-deep ring buffer of
+  pre-microstep snapshots (`STEP_BACK_HISTORY_SIZE` in
+  [src/store/index.ts](src/store/index.ts)). `stepBack` pops one snapshot;
+  `macrostepBack` pops until a `MPC = 0` (Main1 dispatch) boundary. Wired
+  into the Toolbar as ◀ µ / ◀ IJVM buttons. `historyDepth` is exposed in
+  the store so UI can show / disable the buttons.
 
 ## Default microcode / macrocode samples
 
-- [ ] **Recursive factorial or Fibonacci sample** using
-  `INVOKEVIRTUAL` / `IRETURN`. Directive + microcode work landed — see the
-  "recursive sum 1..5" integration test for a working pattern, but the
-  default `DEFAULT_MACROCODE` is still the iterative sum-1..N loop.
-- [ ] **Echo / hello-world sample** once `IN` / `OUT` work — read bytes
-  until newline, push, OUT-loop them.
-- [ ] **`WIDE` example** — a method with > 256 locals, or a constant pool
-  reference > 0xFF, demonstrating the wide-prefix dispatch. (Microcode is
-  in place; the assembler doesn't yet fold `WIDE ILOAD` etc. into a
-  wide-encoded instruction, so callers must hand-emit the bytes.)
+A bundled sample registry lives in
+[src/engine/ijvm/samples.ts](src/engine/ijvm/samples.ts) and the Toolbar
+exposes a "Sample…" dropdown that loads any of them into the macrocode
+editor (with a confirmation prompt before replacing existing code). The
+default macrocode at first launch is `SAMPLE_RECURSIVE_SUM`.
+
+- [x] **Recursive call/return sample** using `INVOKEVIRTUAL` / `IRETURN`.
+  `SAMPLE_RECURSIVE_SUM` (`recsum(n) = n + recsum(n-1)`, base case 0). Set
+  as `DEFAULT_MACROCODE`. (A true factorial is left as a follow-on since
+  IJVM has no `IMUL`; the recursive-sum sample exercises the same control
+  path with shorter execution time.)
+- [x] **Echo sample** using `IN` / `OUT`. `SAMPLE_ECHO` reads bytes via
+  `IN` and writes them via `OUT` until a null byte arrives, transparently
+  stalling on the empty input buffer.
+- [x] **WIDE example.** `SAMPLE_WIDE` exercises the wide-prefix dispatch
+  through 16-bit-indexed `ILOAD` / `ISTORE` / `IINC`. The assembler now
+  folds `WIDE` + `ILOAD` / `ISTORE` / `IINC` on consecutive lines into the
+  4-byte wide-encoded instruction (with idx widened to a `uword`); no
+  hand-emitted bytes required.
 
 ## Control store view & microinstruction inspector
 

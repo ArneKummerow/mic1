@@ -127,7 +127,29 @@ export interface MachineState {
 
   halted: boolean;
   error: string | null;
+
+  // ─── Memory-mapped console I/O ────────────────────────────────────
+  // Reads from MAR == IO_PORT_MAR drain `consoleInputBuffer` (FIFO of
+  // pending bytes); writes append the low byte of MDR to
+  // `consoleOutputBuffer`. The store mirrors these into its UI-facing
+  // strings on each microstep.
+  consoleInputBuffer: number[];
+  consoleOutputBuffer: number[];
+  /**
+   * Set true when an `IN` microcode read finds the input buffer empty.
+   * The pending read is left in place (so MDR is unchanged); on the next
+   * `step()` call, if the buffer is still empty, the cycle is repeated
+   * (no-op trace, MPC unchanged) until input arrives.
+   */
+  waitingForInput: boolean;
 }
+
+/**
+ * Magic word index that selects the memory-mapped console I/O port. A `rd`
+ * to this address drains a byte from `consoleInputBuffer` into `MDR`;
+ * a `wr` appends the low byte of `MDR` to `consoleOutputBuffer`.
+ */
+export const IO_PORT_MAR = -1;
 
 export interface CompletedMemoryOp {
   op: MemoryOp;

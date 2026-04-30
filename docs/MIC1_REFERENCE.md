@@ -89,12 +89,18 @@ Permitted constructs in any order, separated by `;`:
   accepts a numeric literal (e.g. `goto (MBR OR 0x100)`) for cases where
   no convenient label sits at the desired upper-half base.
 
-The default microprogram implements the IJVM control-flow + locals subset
-plus method calls and the WIDE prefix: NOP, BIPUSH, LDC_W, ILOAD, ISTORE,
-IINC, POP, DUP, SWAP, IADD, ISUB, IAND, IOR, IFEQ, IFLT, IF_ICMPEQ, GOTO,
-INVOKEVIRTUAL, IRETURN, WIDE (with wide ILOAD / ISTORE / IINC variants
-dispatched through `(MBR OR 0x100)`), ERR, HALT. IN / OUT are not yet
-wired up — they require memory-mapped console I/O hooks in the simulator.
+The default microprogram implements the full textbook IJVM subset: NOP,
+BIPUSH, LDC_W, ILOAD, ISTORE, IINC, POP, DUP, SWAP, IADD, ISUB, IAND, IOR,
+IFEQ, IFLT, IF_ICMPEQ, GOTO, INVOKEVIRTUAL, IRETURN, WIDE (with wide ILOAD
+/ ISTORE / IINC variants dispatched through `(MBR OR 0x100)`), IN, OUT,
+ERR, HALT.
+
+`IN` / `OUT` are wired through a memory-mapped I/O port at `MAR = -1`
+(`IO_PORT_MAR`): a `rd` to that address drains a byte from
+`machine.consoleInputBuffer` into `MDR`, and a `wr` appends the low byte
+of `MDR` to `machine.consoleOutputBuffer`. If `IN` reads an empty buffer,
+the simulator sets `waitingForInput=true`, leaves the read pending, and
+re-runs the cycle once input arrives.
 
 **Conditional-branch layout convention (MIC-1 JAM trick).** Because the
 JAM mechanism only OR's bit 8 into MPC, the taken-branch target of any
@@ -166,9 +172,17 @@ Operand resolution:
 - `LDC_W` / `INVOKEVIRTUAL <name>` → constant-pool index.
 - `GOTO` / `IFEQ` / `IFLT` / `IF_ICMPEQ <name>` → branch label (PC-relative).
 
-The `WIDE` prefix is recognised at runtime by the microcode but not yet
-folded into a 16-bit-index encoding by the assembler; programs that need
-indices > 0xFF must currently hand-emit the bytes.
+The assembler folds `WIDE` followed by `ILOAD` / `ISTORE` / `IINC` (on
+consecutive lines) into a single wide-encoded instruction whose first
+operand widens from a `ubyte` to a 16-bit `uword`. `WIDE IINC i, c`
+keeps `c` as a signed byte. Other mnemonics after `WIDE` are an error.
+
+A small registry of bundled IJVM samples
+([src/engine/ijvm/samples.ts](../src/engine/ijvm/samples.ts)) covers the
+main control paths: recursive call/return (`SAMPLE_RECURSIVE_SUM`,
+default), iterative loop (`SAMPLE_SUM_LOOP`), I/O (`SAMPLE_ECHO`), and
+WIDE (`SAMPLE_WIDE`). The Toolbar's "Sample…" dropdown loads any of them
+into the macrocode editor.
 
 ## Memory layout (default)
 

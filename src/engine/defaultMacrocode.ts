@@ -1,34 +1,12 @@
 /**
- * Default IJVM program — iteratively compute 1 + 2 + … + N and leave the
- * total on top of the stack. Adapted from the standard textbook example
- * (Tanenbaum, *Structured Computer Organization*, Ch. 4) of a counted loop
- * over local variables.
+ * Default IJVM program loaded at first launch.
  *
- * Local-variable layout (set up by bootstrap.ts; LV points clear of the
- * method area):
- *   LV[0]  unused (reserved for OBJREF in the textbook calling convention)
- *   LV[1]  n      — counter, decremented to 0
- *   LV[2]  sum    — running total
+ * Set to the recursive-sum sample to showcase INVOKEVIRTUAL / IRETURN —
+ * the most pedagogically rich opcode pair in the engine. The bundled
+ * sample picker in the Toolbar (or `IJVM_SAMPLES` in
+ * [src/engine/ijvm/samples.ts](src/engine/ijvm/samples.ts)) lets users
+ * swap to other samples (iterative loop, echo, WIDE).
  *
  * For N = 10 the final TOS is 55.
- *
- * Opcodes exercised: BIPUSH, ISTORE, ILOAD, IFEQ, IADD, IINC, GOTO, HALT.
  */
-export const DEFAULT_MACROCODE = `
-        BIPUSH 10
-        ISTORE 1          // n = 10
-        BIPUSH 0
-        ISTORE 2          // sum = 0
-loop:
-        ILOAD 1
-        IFEQ done         // if n == 0, exit
-        ILOAD 2
-        ILOAD 1
-        IADD
-        ISTORE 2          // sum += n
-        IINC 1, -1        // n -= 1
-        GOTO loop
-done:
-        ILOAD 2           // push final sum
-        HALT
-`.trim();
+export { SAMPLE_RECURSIVE_SUM as DEFAULT_MACROCODE } from './ijvm/samples';

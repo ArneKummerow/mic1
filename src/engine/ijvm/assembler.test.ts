@@ -366,6 +366,55 @@ describe('IJVM assembler: directives — .method / .var / .args', () => {
   });
 });
 
+describe('IJVM assembler: WIDE prefix folding', () => {
+  it('WIDE ILOAD widens the index operand to 16 bits', () => {
+    const r = assembleIJVM(`WIDE\nILOAD 300\nHALT`);
+    expectNoErrors(r);
+    expect([...r.bytes]).toEqual([0xc4, 0x15, 0x01, 0x2c, 0xff]);
+  });
+
+  it('WIDE ISTORE widens the index operand to 16 bits', () => {
+    const r = assembleIJVM(`WIDE\nISTORE 0x0102\nHALT`);
+    expectNoErrors(r);
+    expect([...r.bytes]).toEqual([0xc4, 0x36, 0x01, 0x02, 0xff]);
+  });
+
+  it('WIDE IINC widens the index but keeps the const as a signed byte', () => {
+    const r = assembleIJVM(`WIDE\nIINC 0x0102, -1\nHALT`);
+    expectNoErrors(r);
+    expect([...r.bytes]).toEqual([0xc4, 0x84, 0x01, 0x02, 0xff, 0xff]);
+  });
+
+  it('WIDE without ILOAD/ISTORE/IINC reports an error', () => {
+    const r = assembleIJVM(`WIDE\nIADD\nHALT`);
+    expect(r.errors.some((e) => /WIDE must be followed by/i.test(e.message))).toBe(true);
+  });
+
+  it('WIDE at the very end reports an error', () => {
+    const r = assembleIJVM(`WIDE`);
+    expect(r.errors.some((e) => /WIDE not followed by/i.test(e.message))).toBe(true);
+  });
+
+  it('WIDE ILOAD with named local resolves to a 16-bit index', () => {
+    const r = assembleIJVM(`
+      .method m()
+        .var x
+        WIDE
+        ILOAD x
+        IRETURN
+      .end-method
+    `);
+    expectNoErrors(r);
+    // Prologue (4 bytes) + WIDE (1) + ILOAD (1) + 2-byte idx + IRETURN
+    // x is the 1st named var → LV[1].
+    expect([...r.bytes]).toEqual([
+      0x00, 0x01, 0x00, 0x01, // prologue: argsCount=1, locals=1
+      0xc4, 0x15, 0x00, 0x01, // WIDE ILOAD x (idx=1)
+      0xac,                    // IRETURN
+    ]);
+  });
+});
+
 describe('IJVM assembler: source map with directives', () => {
   it('records line ↔ address for .method prologue', () => {
     const r = assembleIJVM(`
