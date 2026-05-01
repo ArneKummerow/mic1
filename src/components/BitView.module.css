@@ -1,6 +1,6 @@
 .row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex-wrap: nowrap;
 }
 
@@ -8,54 +8,88 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
-  font-size: 10px;
-  padding: 0 2px;
+  height: 100%;
   flex: 0 0 auto;
   text-align: center;
   border-right: 1px solid var(--bg-3);
-  background: var(--bg-1);
+  user-select: none;
+  cursor: help;
+  /* `--bit-color` is set inline per-cell. Default group tint applies via
+   * the bitCell / bbusCell / nextCell classes below. */
 }
 
 .cell:last-child {
   border-right: none;
 }
 
-.headerCell {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--fg-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--bg-2);
-  cursor: help;
-}
-
 .groupSep {
-  margin-left: 6px;
-  border-left: 1px solid var(--border);
+  margin-left: 3px;
 }
 
-.bitOff {
-  color: var(--fg-3);
-  opacity: 0.4;
+/* Bit cells — tinted by their group's color in both states. Cleared cells
+ * sit at low saturation (~12%); set cells at high saturation (~55%) so
+ * the row reads as a coloured field map. */
+.bitCell {
+  background: color-mix(in srgb, var(--bit-color) 12%, var(--bg-1));
 }
 
-.bitOn {
-  color: var(--fg-1);
+.bitCell.bitOn {
+  background: color-mix(in srgb, var(--bit-color) 55%, var(--bg-1));
+}
+
+/* B-bus cell uses the same on/off treatment as bit cells; the "off" state
+ * corresponds to a 'NONE' selector. */
+.bbusCell {
+  background: color-mix(in srgb, var(--bit-color) 12%, var(--bg-1));
+}
+
+.bbusCell.bitOn {
+  background: color-mix(in srgb, var(--bit-color) 55%, var(--bg-1));
+}
+
+/* NEXT_ADDR is always populated (no on/off concept); a faint tint marks
+ * it visually as part of the same word. */
+.nextCell {
+  background: color-mix(in srgb, var(--bit-color) 18%, var(--bg-1));
+  padding: 0 3px;
+}
+
+/* Vertical label — top-to-bottom upright letters. Each character lives in
+ * its own fixed-height inline box so the font's intrinsic em-box leading
+ * doesn't bloat the column. */
+.vlabel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
-}
-
-.textCell {
   color: var(--fg-1);
-  font-size: 10px;
-  font-weight: 600;
+  line-height: 1;
 }
 
-/* Group color accents — applied only to set bits so visual scanning groups
- * by function. */
-.grp_jam { background: color-mix(in srgb, var(--accent-2) 28%, transparent); }
-.grp_shifter { background: color-mix(in srgb, var(--bus-c) 28%, transparent); }
-.grp_alu { background: color-mix(in srgb, var(--accent) 28%, transparent); }
-.grp_cbus { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.grp_mem { background: color-mix(in srgb, var(--mem-fetch) 28%, transparent); }
+.vchar {
+  display: block;
+  height: 8px;
+  font-size: 9px;
+  line-height: 8px;
+  text-align: center;
+}
+
+.bitCell.bitOff .vlabel,
+.bbusCell.bitOff .vlabel {
+  color: color-mix(in srgb, var(--bit-color) 80%, var(--fg-3));
+  opacity: 0.65;
+}
+
+.bitCell.bitOn .vlabel,
+.bbusCell.bitOn .vlabel {
+  color: var(--fg-1);
+}
+
+/* NEXT cell — horizontal hex value. */
+.nextValue {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--fg-1);
+  white-space: nowrap;
+}

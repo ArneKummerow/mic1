@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
 import { IJVM_SAMPLES } from '../engine/ijvm';
+import { DEFAULT_MICROCODE } from '../engine/defaultMicrocode';
 import { resetLayout } from './layoutApi';
 import styles from './Toolbar.module.css';
 
@@ -36,7 +37,6 @@ export function Toolbar(): JSX.Element {
   const pause = useAppStore((s) => s.pause);
   const reset = useAppStore((s) => s.reset);
   const setSpeed = useAppStore((s) => s.setSpeed);
-  const setMacrocode = useAppStore((s) => s.setMacrocode);
   const resetToDefaults = useAppStore((s) => s.resetToDefaults);
   const copyShareUrl = useAppStore((s) => s.copyShareUrl);
 
@@ -64,12 +64,28 @@ export function Toolbar(): JSX.Element {
     if (!id) return;
     const sample = IJVM_SAMPLES.find((s) => s.id === id);
     if (!sample) return;
+    const currentMicrocode = useAppStore.getState().microcode;
+    const microcodeIsCustom = currentMicrocode !== DEFAULT_MICROCODE;
+    const microcodeNote = microcodeIsCustom
+      ? '\n\nYour MAL microcode will also be reset to the bundled default ' +
+        '(samples are designed to run against it — using stale or stripped-down ' +
+        'microcode causes runtime errors when a sample dispatches to an opcode the ' +
+        'microcode does not implement).'
+      : '';
     if (
       confirm(
-        `Replace the current IJVM source with the "${sample.label}" sample?\n\n${sample.description}\n\nYour current IJVM code will be lost.`,
+        `Load the "${sample.label}" sample?\n\n${sample.description}${microcodeNote}\n\nYour current IJVM source will be replaced.`,
       )
     ) {
-      setMacrocode(sample.source);
+      // Atomically swap both source slices, then reset immediately so the
+      // user sees the sample running without waiting for the source-change
+      // debounce. The debounce subscription will fire a second (idempotent)
+      // reset 400ms later; that's harmless.
+      useAppStore.setState({
+        microcode: DEFAULT_MICROCODE,
+        macrocode: sample.source,
+      });
+      useAppStore.getState().reset();
     }
   };
 

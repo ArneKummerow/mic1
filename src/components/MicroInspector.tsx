@@ -8,7 +8,7 @@
  * this one shows what the current control bits actually encode.
  */
 import { useAppStore } from '../store';
-import { BitFieldHeader, BitFieldRow, BIT_FIELDS_WIDTH } from './BitView';
+import { BitFieldRow, BIT_FIELDS_WIDTH, BIT_ROW_HEIGHT } from './BitView';
 import styles from './MicroInspector.module.css';
 
 function fmtMpc(addr: number): string {
@@ -29,11 +29,11 @@ export function MicroInspector(): JSX.Element {
       </div>
       <div className={styles.body}>
         <div className={styles.bitsScroll}>
-          <div style={{ width: BIT_FIELDS_WIDTH }}>
-            <BitFieldHeader />
-            <div className={styles.bitsRow}>
-              <BitFieldRow instr={instr} />
-            </div>
+          <div
+            className={styles.bitsRow}
+            style={{ width: BIT_FIELDS_WIDTH, height: BIT_ROW_HEIGHT }}
+          >
+            <BitFieldRow instr={instr} />
           </div>
         </div>
       </div>

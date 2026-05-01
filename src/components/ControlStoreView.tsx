@@ -3,10 +3,10 @@ import { FixedSizeList } from 'react-window';
 import { useAppStore } from '../store';
 import type { Microinstruction } from '../engine/types';
 import { CONTROL_STORE_SIZE } from '../engine/mal';
-import { BitFieldHeader, BitFieldRow, BIT_FIELDS_WIDTH } from './BitView';
+import { BitFieldRow, BIT_FIELDS_WIDTH, BIT_ROW_HEIGHT } from './BitView';
 import styles from './ControlStoreView.module.css';
 
-const ROW_HEIGHT = 22;
+const TEXT_ROW_HEIGHT = 22;
 
 function fmtMpc(addr: number): string {
   return '0x' + addr.toString(16).padStart(3, '0').toUpperCase();
@@ -229,6 +229,8 @@ export function ControlStoreView(): JSX.Element {
     [items, controlStore, mpc, breakpoints, toggleBreakpoint, bitView],
   );
 
+  const rowHeight = bitView ? BIT_ROW_HEIGHT : TEXT_ROW_HEIGHT;
+
   return (
     <div className="panel">
       <div className={styles.toolbar}>
@@ -251,24 +253,20 @@ export function ControlStoreView(): JSX.Element {
         <span className={styles.toolbarSpacer} />
         <span className={`mono ${styles.toolbarStat}`}>{items.length} rows</span>
       </div>
-      <div className={styles.headerRow} style={{ paddingRight: 6 + sbWidth }}>
-        <span className={styles.colSpacer} />
-        <span className={styles.addrCol}>Addr</span>
-        <span className={styles.labelCol}>Label</span>
-        {bitView ? (
-          <span className={styles.bitsCell} style={{ width: BIT_FIELDS_WIDTH }}>
-            <BitFieldHeader />
-          </span>
-        ) : (
-          <>
-            <span className={styles.aluCol}>ALU</span>
-            <span className={styles.cBusCol}>C</span>
-            <span className={styles.memCol}>Mem</span>
-            <span className={styles.nextCol}>Next</span>
-            <span className={styles.jamCol}>Jam</span>
-          </>
-        )}
-      </div>
+      {!bitView && (
+        // The bit view embeds its own labels (vertically) into every row,
+        // so the column-header strip is only useful in textual mode.
+        <div className={styles.headerRow} style={{ paddingRight: 6 + sbWidth }}>
+          <span className={styles.colSpacer} />
+          <span className={styles.addrCol}>Addr</span>
+          <span className={styles.labelCol}>Label</span>
+          <span className={styles.aluCol}>ALU</span>
+          <span className={styles.cBusCol}>C</span>
+          <span className={styles.memCol}>Mem</span>
+          <span className={styles.nextCol}>Next</span>
+          <span className={styles.jamCol}>Jam</span>
+        </div>
+      )}
       <div ref={containerRef} className={styles.listContainer}>
         {size.width > 0 && size.height > 0 && (
           <FixedSizeList<RowData>
@@ -276,7 +274,7 @@ export function ControlStoreView(): JSX.Element {
             width={size.width}
             height={size.height}
             itemCount={items.length}
-            itemSize={ROW_HEIGHT}
+            itemSize={rowHeight}
             itemData={itemData}
           >
             {Row}

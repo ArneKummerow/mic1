@@ -5,17 +5,18 @@
  *   NEXT_ADDR (9, hex) | JAM (3) | shifter (2) | ALU (6) | C-bus (9) |
  *   memory (3) | B-bus (4, by name)
  *
+ * Each cell carries its field name as a vertical (top-to-bottom) label,
+ * with the cell tinted by its functional group's color (matching the
+ * data-path visualization). The tint stays visible at low saturation
+ * even when the bit is cleared, so the row reads as a coloured field
+ * map rather than a sparse on/off matrix.
+ *
  * Used by both the Control Store table (when "bit view" is toggled on) and
  * by the Microinstruction Inspector panel.
  */
 import type { BBusSource, Microinstruction, WritableRegister } from '../engine/types';
 import styles from './BitView.module.css';
 
-/**
- * Field configuration. Each entry produces one visual cell. Bit cells
- * (`kind: 'bit'`) extract a boolean from the instruction; the hex cell
- * shows `nextAddress` formatted, and the bbus cell shows the register name.
- */
 export type FieldGroup =
   | 'next'
   | 'jam'
@@ -26,69 +27,107 @@ export type FieldGroup =
   | 'bbus';
 
 interface FieldDef {
-  /** Short header label. */
+  /** Short header label, written vertically in each cell. Empty for value
+   *  cells (NEXT_ADDR / B-bus) where the value itself replaces the label. */
   label: string;
   /** Long-form description for tooltips. */
   title: string;
-  /** Group, used for visual separators. */
   group: FieldGroup;
-  /** Cell width in px (drives both header and body). */
   width: number;
   /** How to render the cell content. */
   kind: 'bit' | 'hex9' | 'bbusName';
   /** Bit getter — only meaningful for kind='bit'. */
   read?: (instr: Microinstruction) => boolean;
+  /** CSS color override for this field. Defaults to the group's colour. */
+  color?: string;
 }
 
 const cBusHas = (r: WritableRegister) => (instr: Microinstruction) => instr.cBus.has(r);
 
+// Group colors mirror the data-path visualization (see index.css palette):
+//   ALU -> --alu, A-bus / shifter -> --bus-a, B-bus -> --bus-b,
+//   C-bus -> --bus-c, mem ops -> --mem-{read,write,fetch}.
+// JAM gets --accent-2 (the only remaining unused warm tone); NEXT_ADDR
+// stays a neutral grey since it's a value cell, not a switch.
+const COLOR_NEXT = 'var(--fg-3)';
+const COLOR_JAM = 'var(--accent-2)';
+const COLOR_SHIFTER = 'var(--bus-a)';
+const COLOR_ALU = 'var(--alu)';
+const COLOR_CBUS = 'var(--bus-c)';
+const COLOR_BBUS = 'var(--bus-b)';
+
+// Cell widths.
+const BIT_CELL_W = 14;
+const NEXT_CELL_W = 44;
+const BBUS_CELL_W = 22;
+
+const GROUP_GAP = 3;
+
 export const BIT_FIELDS: readonly FieldDef[] = [
   {
-    label: 'NEXT',
+    label: '',
     title: '9-bit NEXT_ADDRESS — base of the next-MPC computation (hex).',
     group: 'next',
-    width: 44,
+    width: NEXT_CELL_W,
     kind: 'hex9',
   },
 
   // JAM
-  { label: 'JMPC', title: 'JAM JMPC — OR MBR into NEXT_ADDR (opcode dispatch).', group: 'jam', width: 30, kind: 'bit', read: (i) => i.jam.JMPC },
-  { label: 'JAMN', title: 'JAM JAMN — OR (1 << 8) when ALU N flag is set (negative result).', group: 'jam', width: 30, kind: 'bit', read: (i) => i.jam.JAMN },
-  { label: 'JAMZ', title: 'JAM JAMZ — OR (1 << 8) when ALU Z flag is set (zero result).', group: 'jam', width: 30, kind: 'bit', read: (i) => i.jam.JAMZ },
+  { label: 'JMPC', title: 'JAM JMPC — OR MBR into NEXT_ADDR (opcode dispatch).', group: 'jam', width: BIT_CELL_W, kind: 'bit', read: (i) => i.jam.JMPC },
+  { label: 'JAMN', title: 'JAM JAMN — OR (1 << 8) when ALU N flag is set (negative result).', group: 'jam', width: BIT_CELL_W, kind: 'bit', read: (i) => i.jam.JAMN },
+  { label: 'JAMZ', title: 'JAM JAMZ — OR (1 << 8) when ALU Z flag is set (zero result).', group: 'jam', width: BIT_CELL_W, kind: 'bit', read: (i) => i.jam.JAMZ },
 
   // Shifter
-  { label: 'SLL8', title: 'Shifter — shift left by 8 (used to assemble high byte of operand).', group: 'shifter', width: 30, kind: 'bit', read: (i) => i.shifter === 'SLL8' },
-  { label: 'SRA1', title: 'Shifter — arithmetic shift right by 1.', group: 'shifter', width: 30, kind: 'bit', read: (i) => i.shifter === 'SRA1' },
+  { label: 'SLL8', title: 'Shifter — shift left by 8 (used to assemble high byte of operand).', group: 'shifter', width: BIT_CELL_W, kind: 'bit', read: (i) => i.shifter === 'SLL8' },
+  { label: 'SRA1', title: 'Shifter — arithmetic shift right by 1.', group: 'shifter', width: BIT_CELL_W, kind: 'bit', read: (i) => i.shifter === 'SRA1' },
 
   // ALU
-  { label: 'F0', title: 'ALU F0 — function select bit 0.', group: 'alu', width: 24, kind: 'bit', read: (i) => i.alu.F0 },
-  { label: 'F1', title: 'ALU F1 — function select bit 1.', group: 'alu', width: 24, kind: 'bit', read: (i) => i.alu.F1 },
-  { label: 'ENA', title: 'ALU ENA — enable A input (H register).', group: 'alu', width: 28, kind: 'bit', read: (i) => i.alu.ENA },
-  { label: 'ENB', title: 'ALU ENB — enable B input (B-bus value).', group: 'alu', width: 28, kind: 'bit', read: (i) => i.alu.ENB },
-  { label: 'INVA', title: 'ALU INVA — invert A input before the ALU operation.', group: 'alu', width: 30, kind: 'bit', read: (i) => i.alu.INVA },
-  { label: 'INC', title: 'ALU INC — add 1 to the ALU result (carry-in).', group: 'alu', width: 26, kind: 'bit', read: (i) => i.alu.INC },
+  { label: 'F0', title: 'ALU F0 — function select bit 0.', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.F0 },
+  { label: 'F1', title: 'ALU F1 — function select bit 1.', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.F1 },
+  { label: 'ENA', title: 'ALU ENA — enable A input (H register).', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.ENA },
+  { label: 'ENB', title: 'ALU ENB — enable B input (B-bus value).', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.ENB },
+  { label: 'INVA', title: 'ALU INVA — invert A input before the ALU operation.', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.INVA },
+  { label: 'INC', title: 'ALU INC — add 1 to the ALU result (carry-in).', group: 'alu', width: BIT_CELL_W, kind: 'bit', read: (i) => i.alu.INC },
 
-  // C-bus enables (MAR ... H, in textbook MSB→LSB order).
-  { label: 'H', title: 'C-bus enable — write shifter output to H.', group: 'cbus', width: 22, kind: 'bit', read: cBusHas('H') },
-  { label: 'OPC', title: 'C-bus enable — write to OPC (old PC / scratch).', group: 'cbus', width: 28, kind: 'bit', read: cBusHas('OPC') },
-  { label: 'TOS', title: 'C-bus enable — write to TOS (top-of-stack cache).', group: 'cbus', width: 28, kind: 'bit', read: cBusHas('TOS') },
-  { label: 'CPP', title: 'C-bus enable — write to CPP (constant-pool pointer).', group: 'cbus', width: 28, kind: 'bit', read: cBusHas('CPP') },
-  { label: 'LV', title: 'C-bus enable — write to LV (local-variable frame base).', group: 'cbus', width: 24, kind: 'bit', read: cBusHas('LV') },
-  { label: 'SP', title: 'C-bus enable — write to SP (stack pointer).', group: 'cbus', width: 22, kind: 'bit', read: cBusHas('SP') },
-  { label: 'PC', title: 'C-bus enable — write to PC (program counter).', group: 'cbus', width: 22, kind: 'bit', read: cBusHas('PC') },
-  { label: 'MDR', title: 'C-bus enable — write to MDR (memory data register).', group: 'cbus', width: 28, kind: 'bit', read: cBusHas('MDR') },
-  { label: 'MAR', title: 'C-bus enable — write to MAR (memory address register).', group: 'cbus', width: 28, kind: 'bit', read: cBusHas('MAR') },
+  // C-bus enables (textbook MSB→LSB order: H ... MAR).
+  { label: 'H', title: 'C-bus enable — write shifter output to H.', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('H') },
+  { label: 'OPC', title: 'C-bus enable — write to OPC (old PC / scratch).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('OPC') },
+  { label: 'TOS', title: 'C-bus enable — write to TOS (top-of-stack cache).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('TOS') },
+  { label: 'CPP', title: 'C-bus enable — write to CPP (constant-pool pointer).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('CPP') },
+  { label: 'LV', title: 'C-bus enable — write to LV (local-variable frame base).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('LV') },
+  { label: 'SP', title: 'C-bus enable — write to SP (stack pointer).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('SP') },
+  { label: 'PC', title: 'C-bus enable — write to PC (program counter).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('PC') },
+  { label: 'MDR', title: 'C-bus enable — write to MDR (memory data register).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('MDR') },
+  { label: 'MAR', title: 'C-bus enable — write to MAR (memory address register).', group: 'cbus', width: BIT_CELL_W, kind: 'bit', read: cBusHas('MAR') },
 
-  // Memory ops
-  { label: 'WR', title: 'Memory — write MDR to memory[MAR].', group: 'mem', width: 24, kind: 'bit', read: (i) => i.mem.write },
-  { label: 'RD', title: 'Memory — read memory[MAR] into MDR.', group: 'mem', width: 24, kind: 'bit', read: (i) => i.mem.read },
-  { label: 'FE', title: 'Memory — fetch byte at PC into MBR.', group: 'mem', width: 24, kind: 'bit', read: (i) => i.mem.fetch },
+  // Memory ops — each gets its own data-path color.
+  { label: 'WR', title: 'Memory — write MDR to memory[MAR].', group: 'mem', width: BIT_CELL_W, kind: 'bit', read: (i) => i.mem.write, color: 'var(--mem-write)' },
+  { label: 'RD', title: 'Memory — read memory[MAR] into MDR.', group: 'mem', width: BIT_CELL_W, kind: 'bit', read: (i) => i.mem.read, color: 'var(--mem-read)' },
+  { label: 'FE', title: 'Memory — fetch byte at PC into MBR.', group: 'mem', width: BIT_CELL_W, kind: 'bit', read: (i) => i.mem.fetch, color: 'var(--mem-fetch)' },
 
-  // B-bus selector
-  { label: 'B', title: 'B-bus selector — register driving the ALU B input.', group: 'bbus', width: 50, kind: 'bbusName' },
+  // B-bus selector — register name rendered vertically in the cell.
+  {
+    label: '',
+    title: 'B-bus selector — register driving the ALU B input.',
+    group: 'bbus',
+    width: BBUS_CELL_W,
+    kind: 'bbusName',
+  },
 ];
 
-const GROUP_GAP = 6;
+const GROUP_COLOR: Record<FieldGroup, string> = {
+  next: COLOR_NEXT,
+  jam: COLOR_JAM,
+  shifter: COLOR_SHIFTER,
+  alu: COLOR_ALU,
+  cbus: COLOR_CBUS,
+  mem: 'var(--mem-fetch)', // unused — every mem field overrides its color
+  bbus: COLOR_BBUS,
+};
+
+function colorFor(f: FieldDef): string {
+  return f.color ?? GROUP_COLOR[f.group];
+}
 
 /** Total width of the field strip, including inter-group gaps. */
 export const BIT_FIELDS_WIDTH = (() => {
@@ -102,6 +141,13 @@ export const BIT_FIELDS_WIDTH = (() => {
   return w;
 })();
 
+/**
+ * Recommended row height for a bit-view row. Tall enough for the longest
+ * vertical inscription (`INVA` / `MBRU` — 4 letters × 8px char box) plus
+ * a small padding.
+ */
+export const BIT_ROW_HEIGHT = 34;
+
 function fmtNext9(addr: number): string {
   return '0x' + (addr & 0x1ff).toString(16).toUpperCase().padStart(3, '0');
 }
@@ -111,34 +157,10 @@ function fmtBBus(b: BBusSource): string {
 }
 
 /**
- * Header row showing field labels (one per cell) with subtle
- * group-separator gaps. Aligned with the body row.
- */
-export function BitFieldHeader(): JSX.Element {
-  let prevGroup: FieldGroup | null = null;
-  return (
-    <div className={styles.row}>
-      {BIT_FIELDS.map((f, i) => {
-        const sep = prevGroup !== null && prevGroup !== f.group ? styles.groupSep : '';
-        prevGroup = f.group;
-        return (
-          <span
-            key={i}
-            className={`${styles.cell} ${styles.headerCell} ${sep} mono`}
-            style={{ width: f.width }}
-            title={f.title}
-          >
-            {f.label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
  * Body row showing the bit values of an instruction, or all-empty placeholders
- * when `instr` is undefined.
+ * when `instr` is undefined. Each cell carries its field label as a vertical
+ * top-to-bottom inscription; bit cells are highlighted (saturated tint) when
+ * set and faintly tinted when cleared.
  */
 export function BitFieldRow({ instr }: { instr: Microinstruction | undefined }): JSX.Element {
   let prevGroup: FieldGroup | null = null;
@@ -147,39 +169,73 @@ export function BitFieldRow({ instr }: { instr: Microinstruction | undefined }):
       {BIT_FIELDS.map((f, i) => {
         const sep = prevGroup !== null && prevGroup !== f.group ? styles.groupSep : '';
         prevGroup = f.group;
+        const cellStyle: React.CSSProperties = {
+          width: f.width,
+          ['--bit-color' as string]: colorFor(f),
+        };
 
-        let content: React.ReactNode = '';
-        let on = false;
-
-        if (instr === undefined) {
-          content = '';
-        } else if (f.kind === 'hex9') {
-          content = fmtNext9(instr.nextAddress);
-        } else if (f.kind === 'bbusName') {
-          content = fmtBBus(instr.bBus);
-        } else if (f.kind === 'bit') {
-          on = !!f.read?.(instr);
-          content = on ? '1' : '·';
+        if (f.kind === 'bit') {
+          const on = instr !== undefined && !!f.read?.(instr);
+          return (
+            <span
+              key={i}
+              className={`${styles.cell} ${styles.bitCell} ${on ? styles.bitOn : styles.bitOff} ${sep}`}
+              style={cellStyle}
+              title={f.title}
+            >
+              <VerticalLabel label={f.label} />
+            </span>
+          );
         }
 
-        const groupClass =
-          f.kind === 'bit'
-            ? on
-              ? `${styles.bitOn} ${styles[`grp_${f.group}`] ?? ''}`
-              : styles.bitOff
-            : styles.textCell;
+        // Value cell. NEXT shows the hex address horizontally; B-bus shows
+        // the register name as a vertical inscription (matching bit cells).
+        if (f.kind === 'hex9') {
+          const value = instr === undefined ? '' : fmtNext9(instr.nextAddress);
+          return (
+            <span
+              key={i}
+              className={`${styles.cell} ${styles.valueCell} ${styles.nextCell} ${sep}`}
+              style={cellStyle}
+              title={f.title}
+            >
+              <span className={`mono ${styles.nextValue}`}>{value}</span>
+            </span>
+          );
+        }
 
+        // bbusName
+        const reg = instr === undefined ? '' : fmtBBus(instr.bBus);
+        const isActive = instr !== undefined && instr.bBus !== 'NONE';
         return (
           <span
             key={i}
-            className={`${styles.cell} ${groupClass} ${sep} mono`}
-            style={{ width: f.width }}
+            className={`${styles.cell} ${styles.bbusCell} ${isActive ? styles.bitOn : styles.bitOff} ${sep}`}
+            style={cellStyle}
             title={f.title}
           >
-            {content}
+            <VerticalLabel label={reg} />
           </span>
         );
       })}
     </>
+  );
+}
+
+/**
+ * Stack of upright characters with an explicit per-letter line box. Using
+ * one span per character (rather than CSS `writing-mode`) gives reliable,
+ * tight inter-letter spacing — the font's intrinsic em-box leading is
+ * collapsed by the fixed-height row child.
+ */
+function VerticalLabel({ label }: { label: string }): JSX.Element {
+  return (
+    <span className={`${styles.vlabel} mono`}>
+      {label.split('').map((c, idx) => (
+        <span key={idx} className={styles.vchar}>
+          {c}
+        </span>
+      ))}
+    </span>
   );
 }

@@ -136,7 +136,7 @@
 
 .bitsCell {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   flex-shrink: 0;
   height: 100%;
   overflow: hidden;

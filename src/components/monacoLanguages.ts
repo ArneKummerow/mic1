@@ -6,6 +6,7 @@
  */
 
 import type { Monaco } from '@monaco-editor/react';
+import { registerMonacoProviders } from './monacoProviders';
 
 let registered = false;
 
@@ -98,4 +99,7 @@ export function registerMonacoLanguages(monaco: Monaco): void {
   monaco.languages.setLanguageConfiguration('ijvm', {
     comments: { lineComment: '//' },
   });
+
+  // ─── Hover + completion providers ─────────────────────────────────
+  registerMonacoProviders(monaco);
 }

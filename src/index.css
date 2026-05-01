@@ -95,6 +95,15 @@ code,
   margin-left: 5px;
 }
 
+.mic1-bp-glyph {
+  /* Red dot in the glyph margin. Positioned via background-image so it
+     coexists with `.mic1-current-glyph` on the same line. */
+  background:
+    radial-gradient(circle at center, var(--error) 0 4px, transparent 5px) no-repeat center;
+  width: 12px !important;
+  cursor: pointer;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

@@ -50,6 +50,6 @@
 
 .bitsRow {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   margin-top: 1px;
 }
