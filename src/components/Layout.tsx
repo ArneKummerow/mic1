@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockviewReact,
   themeAbyss,
+  themeLight,
   type DockviewReadyEvent,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
   type SerializedDockview,
 } from 'dockview-react';
+import { useAppStore } from '../store';
 import 'dockview-react/dist/styles/dockview.css';
 import { MicrocodeEditor } from './MicrocodeEditor';
 import { MacrocodeEditor } from './MacrocodeEditor';
@@ -17,8 +19,9 @@ import { RegisterPanel } from './RegisterPanel';
 import { ControlStoreView } from './ControlStoreView';
 import { MicroInspector } from './MicroInspector';
 import { Console } from './Console';
-import { LAYOUT_STORAGE_KEY, setDockApi } from './layoutApi';
+import { LAYOUT_STORAGE_KEY, setDockApi, getDockApi } from './layoutApi';
 import { applyDefaultLayout } from './defaultLayout';
+import { PANEL_DEFS } from './panels';
 import './Layout.css';
 
 const LAYOUT_DEBOUNCE_MS = 250;
@@ -71,6 +74,31 @@ function loadPersistedLayout(): SerializedDockview | null {
   }
 }
 
+/**
+ * Reconcile the dock so its open panels match the user's `hiddenPanels`
+ * preference. Removes panels that should be hidden; re-adds panels that
+ * should be visible but are missing (positioned at the end of the dock —
+ * the user can drag them where they like).
+ */
+function reconcileHiddenPanels(api: ReturnType<typeof getDockApi>, hidden: readonly string[]): void {
+  if (!api) return;
+  const hiddenSet = new Set(hidden);
+  for (const def of PANEL_DEFS) {
+    const present = api.getPanel(def.id);
+    if (hiddenSet.has(def.id)) {
+      if (present) api.removePanel(present);
+    } else {
+      if (!present) {
+        api.addPanel({
+          id: def.id,
+          component: def.id,
+          title: def.title,
+        });
+      }
+    }
+  }
+}
+
 function persistLayout(state: SerializedDockview): void {
   try {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(state));
@@ -81,6 +109,9 @@ function persistLayout(state: SerializedDockview): void {
 
 export function Layout(): JSX.Element {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const theme = useAppStore((s) => s.uiPrefs.theme);
+  const hideTabBars = useAppStore((s) => s.uiPrefs.hideTabBars);
+  const hiddenPanels = useAppStore((s) => s.uiPrefs.hiddenPanels);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     const api = event.api;
@@ -102,6 +133,9 @@ export function Layout(): JSX.Element {
       applyDefaultLayout(api);
     }
 
+    // Apply current visibility prefs once after layout init.
+    reconcileHiddenPanels(api, useAppStore.getState().uiPrefs.hiddenPanels);
+
     api.onDidLayoutChange(() => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
@@ -117,13 +151,19 @@ export function Layout(): JSX.Element {
     };
   }, []);
 
+  // Sync the dock's open panels with the user's visibility prefs whenever
+  // they change.
+  useEffect(() => {
+    reconcileHiddenPanels(getDockApi(), hiddenPanels);
+  }, [hiddenPanels]);
+
   return (
     <DockviewReact
-      className="mic1-dock"
+      className={`mic1-dock${hideTabBars ? ' mic1-dock--hide-tabs' : ''}`}
       components={components}
       tabComponents={tabComponents}
       defaultTabComponent={ClosablelessTab}
-      theme={themeAbyss}
+      theme={theme === 'light' ? themeLight : themeAbyss}
       onReady={onReady}
       disableFloatingGroups
       singleTabMode="fullwidth"

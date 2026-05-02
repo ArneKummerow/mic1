@@ -3,35 +3,8 @@ import Editor, { type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../store';
 import { registerMonacoLanguages } from './monacoLanguages';
+import { monacoThemeName } from './monacoSetup';
 import styles from './CodeEditor.module.css';
-
-const MONACO_THEME = 'mic1-dark';
-
-function defineTheme(monaco: Monaco): void {
-  monaco.editor.defineTheme(MONACO_THEME, {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '6b7480', fontStyle: 'italic' },
-      { token: 'keyword', foreground: 'f0883e' },
-      { token: 'keyword.operator', foreground: 'f0883e' },
-      { token: 'variable.predefined', foreground: '58a6ff' },
-      { token: 'constant', foreground: 'f0e442' },
-      { token: 'number', foreground: '94de4a' },
-      { token: 'number.hex', foreground: '94de4a' },
-      { token: 'type.identifier', foreground: 'cc79a7', fontStyle: 'bold' },
-      { token: 'operator', foreground: 'e6edf3' },
-    ],
-    colors: {
-      'editor.background': '#161b22',
-      'editor.foreground': '#e6edf3',
-      'editorLineNumber.foreground': '#6b7480',
-      'editorLineNumber.activeForeground': '#9da7b0',
-      'editor.selectionBackground': '#2a313a',
-      'editor.lineHighlightBackground': '#1f242c',
-    },
-  });
-}
 
 function fmtMpc(addr: number): string {
   return addr.toString(16).toUpperCase().padStart(3, '0');
@@ -46,6 +19,7 @@ export function MicrocodeEditor(): JSX.Element {
   // Highlight the microinstruction whose execution is shown in the data path
   // (the just-executed cycle), falling back to MPC before the first step.
   const currentMpc = useAppStore((s) => s.lastTrace?.mpcBefore ?? s.machine.MPC);
+  const theme = useAppStore((s) => s.uiPrefs.theme);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -55,6 +29,14 @@ export function MicrocodeEditor(): JSX.Element {
   // reads fresh data without re-creating the editor instance.
   const assemblyRef = useRef<typeof microAssembly>(microAssembly);
   assemblyRef.current = microAssembly;
+
+  // Switch Monaco's global theme when the user toggles the app theme.
+  // `setTheme` is global to all editor instances.
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    monaco.editor.setTheme(monacoThemeName(theme));
+  }, [theme]);
 
   // Push assembler errors into Monaco as squiggle markers.
   useEffect(() => {
@@ -143,8 +125,7 @@ export function MicrocodeEditor(): JSX.Element {
     editorRef.current = ed;
     monacoRef.current = monaco;
     registerMonacoLanguages(monaco);
-    defineTheme(monaco);
-    monaco.editor.setTheme(MONACO_THEME);
+    monaco.editor.setTheme(monacoThemeName(theme));
     decorationsRef.current = ed.createDecorationsCollection();
     bpDecorationsRef.current = ed.createDecorationsCollection();
 
@@ -174,9 +155,25 @@ export function MicrocodeEditor(): JSX.Element {
     });
   };
 
+  const handleFormat = (): void => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    // Trigger Monaco's "Format Document" action — this routes through the
+    // formatter we register in monacoProviders.ts.
+    ed.getAction('editor.action.formatDocument')?.run();
+  };
+
   return (
     <div className="panel">
       <div className={styles.editorWrap}>
+        <button
+          type="button"
+          className={styles.formatButton}
+          onClick={handleFormat}
+          title="Format MAL (Shift+Alt+F)"
+        >
+          Format
+        </button>
         {microAssembly && microAssembly.errors.length > 0 && (
           <span className={styles.errorBadge}>
             {microAssembly.errors.length} error{microAssembly.errors.length === 1 ? '' : 's'}

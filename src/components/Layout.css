@@ -26,6 +26,16 @@
   --dv-drag-over-border-color: var(--accent);
 }
 
+/*
+ * Hide tab bars across all dock groups. The user opted in via the View menu;
+ * tab switching becomes impossible while hidden, but that's the documented
+ * trade-off (and the user can flip it back at any time). We zero out the
+ * tab container's height/visibility but keep the layout intact.
+ */
+.mic1-dock--hide-tabs .dv-tabs-and-actions-container {
+  display: none !important;
+}
+
 /* Custom closeless tab. */
 .mic1-tab {
   display: flex;

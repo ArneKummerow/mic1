@@ -17,3 +17,27 @@
   border-radius: 3px;
   pointer-events: none;
 }
+
+.formatButton {
+  position: absolute;
+  top: 6px;
+  right: 80px;
+  z-index: 10;
+  background: var(--bg-2, #21262d);
+  color: var(--fg-1, #e6edf3);
+  border: 1px solid var(--border, #30363d);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.formatButton:hover {
+  background: var(--bg-3, #2a313a);
+}
+
+.formatButton:active {
+  background: var(--bg-1, #161b22);
+}

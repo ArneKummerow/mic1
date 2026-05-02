@@ -3,9 +3,8 @@ import Editor, { type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../store';
 import { registerMonacoLanguages } from './monacoLanguages';
+import { monacoThemeName } from './monacoSetup';
 import styles from './CodeEditor.module.css';
-
-const MONACO_THEME = 'mic1-dark';
 
 function fmtByteAddr(addr: number): string {
   return addr.toString(16).toUpperCase().padStart(4, '0');
@@ -42,6 +41,7 @@ export function MacrocodeEditor(): JSX.Element {
   // `machine.PC` directly would mis-highlight mid-handler when PC walks past
   // the operand bytes.
   const currentPc = useAppStore((s) => s.currentOpcodeAddress);
+  const theme = useAppStore((s) => s.uiPrefs.theme);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -49,6 +49,12 @@ export function MacrocodeEditor(): JSX.Element {
   const bpDecorationsRef = useRef<editor.IEditorDecorationsCollection | null>(null);
   const assemblyRef = useRef<typeof ijvmAssembly>(ijvmAssembly);
   assemblyRef.current = ijvmAssembly;
+
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    monaco.editor.setTheme(monacoThemeName(theme));
+  }, [theme]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -134,7 +140,7 @@ export function MacrocodeEditor(): JSX.Element {
     editorRef.current = ed;
     monacoRef.current = monaco;
     registerMonacoLanguages(monaco);
-    monaco.editor.setTheme(MONACO_THEME);
+    monaco.editor.setTheme(monacoThemeName(theme));
     decorationsRef.current = ed.createDecorationsCollection();
     bpDecorationsRef.current = ed.createDecorationsCollection();
 

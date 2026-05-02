@@ -8,7 +8,8 @@
  *   assignment = writable-reg ('=' writable-reg)* '=' expr-with-shifter
  *   mem-op     = 'rd' | 'wr' | 'fetch'
  *   goto       = 'goto' (IDENT | NUMBER | '(' 'MBR' ('OR' IDENT)? ')')
- *   if-goto    = 'if' '(' ('N'|'Z') ')' 'goto' (IDENT|NUMBER)
+ *   if-goto    = 'if' '(' ('~'|'!')? ('N'|'Z') ')' 'goto' goto-target
+ *                  (';' 'else' 'goto' goto-target)?
  *   expr       = unary ((PLUS|MINUS|AND|OR) unary)?
  *   unary      = (MINUS|TILDE)? primary
  *   primary    = NUMBER | IDENT
@@ -80,7 +81,14 @@ export type Statement =
     }
   | { kind: 'mem'; op: 'rd' | 'wr' | 'fetch'; token: Token }
   | { kind: 'goto'; target: GotoTarget; token: Token }
-  | { kind: 'if'; flag: 'N' | 'Z'; target: GotoTarget; token: Token };
+  | {
+      kind: 'if';
+      flag: 'N' | 'Z';
+      negated: boolean;
+      target: GotoTarget;
+      elseTarget?: GotoTarget;
+      token: Token;
+    };
 
 export type GotoTarget =
   | { kind: 'label'; name: string; token: Token }
@@ -375,6 +383,12 @@ class Parser {
 
   private parseIfStatement(startTok: Token): Statement {
     this.expect('LPAREN');
+    let negated = false;
+    const negTok = this.peek();
+    if (negTok.type === 'TILDE' || negTok.type === 'BANG') {
+      this.advance();
+      negated = true;
+    }
     const flagTok = this.expectIdent();
     if (flagTok.value !== 'N' && flagTok.value !== 'Z') {
       this.fail(flagTok, `Expected 'N' or 'Z', got '${flagTok.value}'`);
@@ -386,7 +400,31 @@ class Parser {
       this.fail(gotoTok, `Expected 'goto' after 'if (...)'`);
     }
     const target = this.parseGotoTarget();
-    return { kind: 'if', flag, target, token: startTok };
+
+    // Optional `; else goto F` clause for the textbook two-label form.
+    let elseTarget: GotoTarget | undefined;
+    if (
+      this.peek().type === 'SEMI' &&
+      this.peek(1).type === 'IDENT' &&
+      this.peek(1).value.toLowerCase() === 'else'
+    ) {
+      this.advance(); // ;
+      this.advance(); // else
+      const gotoTok2 = this.expectIdent();
+      if (gotoTok2.value.toLowerCase() !== 'goto') {
+        this.fail(gotoTok2, `Expected 'goto' after 'else'`);
+      }
+      elseTarget = this.parseGotoTarget();
+    }
+
+    return {
+      kind: 'if',
+      flag,
+      negated,
+      target,
+      ...(elseTarget !== undefined && { elseTarget }),
+      token: startTok,
+    };
   }
 
   private expect(type: Token['type']): Token {

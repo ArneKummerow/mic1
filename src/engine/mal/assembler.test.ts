@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { assembleMicrocode } from './assembler';
+import { disassembleControlStore } from './disassembler';
 import { createMachineState, step } from '../simulator';
+import type { Microinstruction } from '../types';
 
 function expectNoErrors(result: ReturnType<typeof assembleMicrocode>): void {
   if (result.errors.length > 0) {
@@ -253,6 +255,233 @@ describe('MAL assembler: comments and whitespace', () => {
     const r = assembleMicrocode('\n\n\nH = MDR\n\n');
     expectNoErrors(r);
     expect(r.controlStore[0]!.bBus).toBe('MDR');
+  });
+});
+
+describe('MAL assembler: two-label and negated conditionals', () => {
+  it('accepts the textbook two-label form', () => {
+    const src = `
+      L1 = 0x020   H = MDR; if (Z) goto L2; else goto L3
+      L3 = 0x010   goto L3
+      L2 = 0x110   MDR = H
+    `;
+    const r = assembleMicrocode(src);
+    expectNoErrors(r);
+    expect(r.controlStore[0x20]!.jam.JAMZ).toBe(true);
+    expect(r.controlStore[0x20]!.nextAddress).toBe(0x10);
+  });
+
+  it('rejects two-label form with mismatched low bytes', () => {
+    const src = `
+      L1 = 0x010   if (Z) goto L2; else goto L3
+      L3 = 0x015   goto L3
+      L2 = 0x110   goto L2
+    `;
+    const r = assembleMicrocode(src);
+    expect(r.errors.some((e) => /share the low byte/.test(e.message))).toBe(true);
+  });
+
+  it('rejects two-label form when the else target has bit 8 set', () => {
+    const src = `
+      L1 = 0x010   if (Z) goto L2; else goto L3
+      L3 = 0x111   goto L3
+      L2 = 0x110   goto L2
+    `;
+    const r = assembleMicrocode(src);
+    expect(r.errors.some((e) => /must be in 0x000..0x0ff/i.test(e.message))).toBe(true);
+  });
+
+  it('accepts negated single-label form `if (~Z) goto T` (T in lower half)', () => {
+    const src = `
+      L1 = 0x010   H = MDR; if (~Z) goto L2
+      L2 = 0x011   goto L2
+    `;
+    const r = assembleMicrocode(src);
+    expectNoErrors(r);
+    expect(r.controlStore[0x10]!.jam.JAMZ).toBe(true);
+    expect(r.controlStore[0x10]!.nextAddress).toBe(0x11);
+  });
+
+  it('accepts `if (!N) goto T` with `!` syntax', () => {
+    const src = `
+      L1 = 0x010   if (!N) goto L2
+      L2 = 0x011   goto L2
+    `;
+    const r = assembleMicrocode(src);
+    expectNoErrors(r);
+    expect(r.controlStore[0x10]!.jam.JAMN).toBe(true);
+  });
+
+  it('rejects negated single-label whose target is in the upper half', () => {
+    const src = `
+      L1 = 0x010   if (~Z) goto L2
+      L2 = 0x110   goto L2
+    `;
+    const r = assembleMicrocode(src);
+    expect(r.errors.some((e) => /must be in 0x000..0x0ff/i.test(e.message))).toBe(true);
+  });
+
+  it('runs `if (~Z) goto T; else goto F` correctly in the simulator', () => {
+    // Negated semantics: branch taken when Z is FALSE.
+    const src = `
+      Start = 0x000  H = MDR; if (~Z) goto NotZero; else goto IsZero
+      NotZero = 0x001 goto NotZero
+      IsZero  = 0x101 goto IsZero
+    `;
+    const r = assembleMicrocode(src);
+    expectNoErrors(r);
+
+    // Z-false (MDR=7): should land at NotZero (0x001).
+    {
+      const state = createMachineState(64);
+      state.controlStore = r.controlStore;
+      state.MDR = 7;
+      state.MPC = 0;
+      const trace = step(state);
+      expect(trace.aluFlags.Z).toBe(false);
+      expect(trace.mpcAfter).toBe(0x001);
+    }
+    // Z-true (MDR=0): should land at IsZero (0x101).
+    {
+      const state = createMachineState(64);
+      state.controlStore = r.controlStore;
+      state.MDR = 0;
+      state.MPC = 0;
+      const trace = step(state);
+      expect(trace.aluFlags.Z).toBe(true);
+      expect(trace.mpcAfter).toBe(0x101);
+    }
+  });
+});
+
+describe('MAL encoder: improved diagnostics', () => {
+  it('suggests a workaround for `H - 1`', () => {
+    const r = assembleMicrocode('H = H - 1');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/Move H/);
+    expect(r.errors[0].message).toMatch(/B-bus register/);
+  });
+
+  it('points at swapping for `H - R`', () => {
+    const r = assembleMicrocode('H = H - MDR');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/MDR - H/);
+  });
+
+  it('rejects -1 inside an addition with a hint', () => {
+    const r = assembleMicrocode('H = MDR + -1');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/-1.*cannot be added directly/);
+  });
+
+  it('rejects `~R + 1` with a clear hint', () => {
+    const r = assembleMicrocode('H = ~MDR + 1');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/Unary.*not allowed inside an addition/);
+  });
+
+  it('explains why two B-bus regs are not allowed', () => {
+    const r = assembleMicrocode('H = MDR + SP');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/Only one non-H register.*B-bus.*MDR.*SP/);
+  });
+
+  it('suggests unary form for `0 - H`', () => {
+    const r = assembleMicrocode('H = 0 - H');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/use the unary form '-H'/);
+  });
+});
+
+describe('MAL assembler: round-trip via disassembler', () => {
+  function semanticView(instr: Microinstruction): unknown {
+    return {
+      nextAddress: instr.nextAddress,
+      jam: instr.jam,
+      alu: instr.alu,
+      shifter: instr.shifter,
+      cBus: [...instr.cBus].sort(),
+      mem: instr.mem,
+      bBus: instr.bBus,
+    };
+  }
+
+  function expectRoundTrip(src: string): void {
+    const a = assembleMicrocode(src);
+    expectNoErrors(a);
+    const disassembled = disassembleControlStore(a.controlStore);
+    const b = assembleMicrocode(disassembled);
+    if (b.errors.length > 0) {
+      throw new Error(
+        `Re-assembly errors:\n${b.errors.map((e) => `  ${e.line}:${e.column} ${e.message}`).join('\n')}\n--- disassembled output ---\n${disassembled}`,
+      );
+    }
+    for (let addr = 0; addr < a.controlStore.length; addr++) {
+      const ai = a.controlStore[addr];
+      const bi = b.controlStore[addr];
+      if (!ai && !bi) continue;
+      if (!ai || !bi) {
+        throw new Error(
+          `Round-trip mismatch at 0x${addr.toString(16)}: a=${ai ? 'def' : 'undef'} b=${bi ? 'def' : 'undef'}\n--- disassembled ---\n${disassembled}`,
+        );
+      }
+      expect(semanticView(bi)).toEqual(semanticView(ai));
+    }
+  }
+
+  it('round-trips the full ALU expression set', () => {
+    expectRoundTrip(`
+      L0 = 0x000   H = MDR
+      L1 = 0x001   H = -H
+      L2 = 0x002   H = ~H
+      L3 = 0x003   H = MDR + 1
+      L4 = 0x004   H = H + 1
+      L5 = 0x005   H = MDR + H + 1
+      L6 = 0x006   H = MDR + H
+      L7 = 0x007   H = MDR - 1
+      L8 = 0x008   H = MDR - H
+      L9 = 0x009   H = ~MDR
+      LA = 0x00a   H = -MDR
+      LB = 0x00b   H = MDR AND H
+      LC = 0x00c   H = MDR OR H
+      LD = 0x00d   H = 0
+      LE = 0x00e   H = 1
+      LF = 0x00f   H = -1
+    `);
+  });
+
+  it('round-trips shifter forms', () => {
+    expectRoundTrip(`
+      A = 0x010   MDR = H << 8
+      B = 0x011   MDR = H >> 1
+    `);
+  });
+
+  it('round-trips memory ops and goto forms', () => {
+    expectRoundTrip(`
+      Main = 0x000   PC = PC + 1; fetch; goto (MBR)
+      A    = 0x001   MAR = SP; rd
+      B    = 0x002   wr; goto Main
+      C    = 0x003   goto (MBR OR 0x100)
+    `);
+  });
+
+  it('round-trips assignment chains', () => {
+    expectRoundTrip(`
+      L0 = 0x000   MDR = TOS = MDR + H
+      L1 = 0x001   MAR = SP = SP - 1; rd
+    `);
+  });
+
+  it('round-trips conditional branches', () => {
+    expectRoundTrip(`
+      L1 = 0x010   H = MDR; if (Z) goto L2
+      L2 = 0x110   MDR = H
+      L3 = 0x011   if (N) goto L4
+      L4 = 0x111   goto L4
+      L5 = 0x012   if (~Z) goto L6
+      L6 = 0x013   goto L6
+    `);
   });
 });
 

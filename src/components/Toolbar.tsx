@@ -12,12 +12,28 @@ import {
   Share2,
   FileText,
   LayoutGrid,
+  Upload,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
 import { IJVM_SAMPLES } from '../engine/ijvm';
 import { DEFAULT_MICROCODE } from '../engine/defaultMicrocode';
 import { resetLayout } from './layoutApi';
+import { ViewMenu } from './ViewMenu';
+import { importTextFile, exportTextFile } from '../utils/fileIO';
 import styles from './Toolbar.module.css';
+
+const MAL_SPEC = {
+  extension: '.mal',
+  description: 'MAL microcode',
+  mime: 'text/plain',
+} as const;
+const IJVM_SPEC = {
+  extension: '.ijvm',
+  description: 'IJVM macrocode',
+  mime: 'text/plain',
+} as const;
 
 const SPEED_PRESETS = [1, 2, 4, 10, 50, 200, 1000, 10000];
 
@@ -39,8 +55,11 @@ export function Toolbar(): JSX.Element {
   const setSpeed = useAppStore((s) => s.setSpeed);
   const resetToDefaults = useAppStore((s) => s.resetToDefaults);
   const copyShareUrl = useAppStore((s) => s.copyShareUrl);
+  const theme = useAppStore((s) => s.uiPrefs.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
 
   const [shareFlash, setShareFlash] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
 
   const handleShare = async (): Promise<void> => {
     await copyShareUrl();
@@ -56,6 +75,33 @@ export function Toolbar(): JSX.Element {
 
   const handleResetLayout = (): void => {
     resetLayout();
+  };
+
+  const handleImport = async (): Promise<void> => {
+    const result = await importTextFile([MAL_SPEC, IJVM_SPEC]);
+    if (!result) return;
+    const lower = result.name.toLowerCase();
+    const isMal = lower.endsWith('.mal');
+    const isIjvm = lower.endsWith('.ijvm');
+    if (!isMal && !isIjvm) {
+      alert(`Unrecognised extension: ${result.name}\n\nExpected .mal or .ijvm.`);
+      return;
+    }
+    const target = isMal ? 'microcode (MAL)' : 'macrocode (IJVM)';
+    if (!confirm(`Replace the current ${target} with the contents of "${result.name}"?`)) return;
+    if (isMal) useAppStore.setState({ microcode: result.text });
+    else useAppStore.setState({ macrocode: result.text });
+    useAppStore.getState().reset();
+  };
+
+  const handleExport = async (e: React.ChangeEvent<HTMLSelectElement>): Promise<void> => {
+    const choice = e.target.value;
+    e.target.value = '';
+    if (choice === 'mal') {
+      await exportTextFile('microcode.mal', useAppStore.getState().microcode, MAL_SPEC);
+    } else if (choice === 'ijvm') {
+      await exportTextFile('program.ijvm', useAppStore.getState().macrocode, IJVM_SPEC);
+    }
   };
 
   const handleSampleChoice = (e: React.ChangeEvent<HTMLSelectElement>): void => {
@@ -165,6 +211,23 @@ export function Toolbar(): JSX.Element {
           <Share2 size={14} />
           <span>{shareFlash ? 'Copied!' : 'Share'}</span>
         </button>
+        <button onClick={handleImport} title="Import a .mal or .ijvm file from disk">
+          <Upload size={14} />
+          <span>Import</span>
+        </button>
+        <select
+          className={styles.sampleSelect}
+          onChange={handleExport}
+          defaultValue=""
+          title="Export the current microcode or macrocode to a file"
+          aria-label="Export source"
+        >
+          <option value="" disabled>
+            Export…
+          </option>
+          <option value="mal">Microcode (.mal)</option>
+          <option value="ijvm">Macrocode (.ijvm)</option>
+        </select>
         <select
           className={styles.sampleSelect}
           onChange={handleSampleChoice}
@@ -185,6 +248,14 @@ export function Toolbar(): JSX.Element {
           <FileText size={14} />
           <span>Defaults</span>
         </button>
+        <button
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+        <ViewMenu open={viewMenuOpen} setOpen={setViewMenuOpen} />
         <button onClick={handleResetLayout} title="Restore the default panel arrangement">
           <LayoutGrid size={14} />
           <span>Layout</span>

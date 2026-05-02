@@ -109,18 +109,35 @@ export interface AppState {
 
   setControlStoreBitView: (v: boolean) => void;
   setControlStoreHideEmpty: (v: boolean) => void;
+  setTheme: (theme: ThemeName) => void;
+  toggleTheme: () => void;
+  setHiddenPanels: (ids: ReadonlySet<string>) => void;
+  setHideTabBars: (v: boolean) => void;
 }
+
+export type ThemeName = 'dark' | 'light';
 
 export interface UiPrefs {
   /** Render the Control Store rows in 36-bit-word-decomposed layout. */
   controlStoreBitView: boolean;
   /** Hide unused control-store slots (with placeholder span markers). */
   controlStoreHideEmpty: boolean;
+  /** Color theme. */
+  theme: ThemeName;
+  /** Panel ids the user has hidden. Stored as an array because Set is not
+   *  JSON-serialisable. The Layout component re-syncs the dock from this
+   *  list. */
+  hiddenPanels: string[];
+  /** When true, hide tab bars across all dock groups. */
+  hideTabBars: boolean;
 }
 
 const DEFAULT_UI_PREFS: UiPrefs = {
   controlStoreBitView: false,
   controlStoreHideEmpty: false,
+  theme: 'dark',
+  hiddenPanels: [],
+  hideTabBars: false,
 };
 
 let runIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -408,6 +425,19 @@ export const useAppStore = create<AppState>()(
         setControlStoreHideEmpty: (v) => {
           set({ uiPrefs: { ...get().uiPrefs, controlStoreHideEmpty: v } });
         },
+        setTheme: (theme) => {
+          set({ uiPrefs: { ...get().uiPrefs, theme } });
+        },
+        toggleTheme: () => {
+          const cur = get().uiPrefs.theme;
+          set({ uiPrefs: { ...get().uiPrefs, theme: cur === 'dark' ? 'light' : 'dark' } });
+        },
+        setHiddenPanels: (ids) => {
+          set({ uiPrefs: { ...get().uiPrefs, hiddenPanels: [...ids].sort() } });
+        },
+        setHideTabBars: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, hideTabBars: v } });
+        },
       }),
       {
         name: 'mic1-visualizer:v1',
@@ -422,6 +452,10 @@ export const useAppStore = create<AppState>()(
         // restored sources.
         onRehydrateStorage: () => (state) => {
           if (!state) return;
+          // Merge persisted prefs with defaults so newly-added fields (e.g.
+          // a theme key added in a later release) get sensible values
+          // without nuking the user's existing prefs.
+          state.uiPrefs = { ...DEFAULT_UI_PREFS, ...state.uiPrefs };
           const fresh = bootstrap(state.microcode, state.macrocode);
           state.machine = fresh.machine;
           state.microAssembly = fresh.microAssembly;

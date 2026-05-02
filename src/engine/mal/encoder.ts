@@ -29,7 +29,14 @@ import type {
   ShifterOp as ShifterOpEngine,
   WritableRegister,
 } from '../types';
-import type { AluRegister, Expr, ParsedLine, Statement, WritableReg } from './parser';
+import type {
+  AluRegister,
+  Expr,
+  GotoTarget,
+  ParsedLine,
+  Statement,
+  WritableReg,
+} from './parser';
 
 export interface AssemblyError {
   line: number;
@@ -47,7 +54,17 @@ export type UnresolvedNext =
   | { kind: 'sequential' }
   | { kind: 'absolute'; address: number; jam: JamControl }
   | { kind: 'label'; name: string; jam: JamControl; line: number; column: number }
-  | { kind: 'mbr'; orLabel?: string; orAddress?: number; line: number; column: number };
+  | { kind: 'mbr'; orLabel?: string; orAddress?: number; line: number; column: number }
+  | {
+      kind: 'if-pair';
+      jam: JamControl;
+      /** Target reached when the JAM mechanism sets bit 8 (condition true). */
+      jamTaken?: { target: GotoTarget; line: number; column: number };
+      /** Target reached when bit 8 stays 0 (condition false). */
+      fallThrough?: { target: GotoTarget; line: number; column: number };
+      line: number;
+      column: number;
+    };
 
 // Narrowed expression types ---------------------------------------------
 
@@ -198,14 +215,34 @@ function encodePlusChain(expr: BinaryExpr): EncodingResult {
       else if (isBBusReg(t.name)) bBusRegs.push(t.name);
     } else if (t.kind === 'num') {
       if (t.value === 1) oneCount++;
-      else return errAt(t.token, `Only +1 is supported as a literal in additions`);
+      else if (t.value === -1) {
+        return errAt(
+          t.token,
+          `'-1' cannot be added directly; use 'R - 1' for decrement or '-H'/'-R' for negation.`,
+        );
+      } else {
+        return errAt(
+          t.token,
+          `Only +1 is supported as a literal in additions (got ${t.value}); the ALU only has the 'plus 1' (INC) input.`,
+        );
+      }
+    } else if (t.kind === 'unary') {
+      return errAt(
+        t.token,
+        `Unary '${t.op}' is not allowed inside an addition; the ALU has no 'A + ~B' / 'A + (-B)' encoding. Compute the unary in a separate cycle.`,
+      );
     } else {
       return errAt(t.token, `Unsupported term in '+' expression`);
     }
   }
 
   if (hCount > 1) return errAt(expr.token, `H can appear at most once in an expression`);
-  if (bBusRegs.length > 1) return errAt(expr.token, `Only one non-H register on the B-bus`);
+  if (bBusRegs.length > 1) {
+    return errAt(
+      expr.token,
+      `Only one non-H register can be on the B-bus per cycle (got ${bBusRegs.join(', ')}). Move one of them through H first.`,
+    );
+  }
   if (oneCount > 1) return errAt(expr.token, `Constant 1 may appear at most once`);
 
   const r: BBusReg | undefined = bBusRegs[0];
@@ -267,10 +304,41 @@ function encodeMinus(expr: BinaryExpr): EncodingResult {
     };
   }
   if (left.kind === 'reg' && left.name === 'H' && right.kind === 'num' && right.value === 1) {
-    return errAt(token, `'H - 1' is not expressible in one ALU cycle`);
+    return errAt(
+      token,
+      `'H - 1' is not expressible in one ALU cycle: H is on the A-bus only and the ALU has no 'A - 1' encoding. Move H to a B-bus register first, e.g. 'MDR = H' then 'MDR = MDR - 1'.`,
+    );
   }
   if (left.kind === 'reg' && left.name === 'H' && right.kind === 'reg' && right.name !== 'H') {
-    return errAt(token, `'H - R' is not expressible (use 'R - H' or compute via H first)`);
+    return errAt(
+      token,
+      `'H - ${right.name}' is not expressible: subtraction is always B - A, so only '${right.name} - H' is supported. Either swap operands ('${right.name} - H' yields ${right.name} - H), or compute it across two cycles.`,
+    );
+  }
+  if (
+    left.kind === 'reg' &&
+    isBBusReg(left.name) &&
+    right.kind === 'num' &&
+    right.value !== 1
+  ) {
+    return errAt(
+      token,
+      `Only 'R - 1' is a supported decrement; the ALU has no 'R - ${right.value}' encoding.`,
+    );
+  }
+  if (left.kind === 'num' && right.kind === 'reg') {
+    if (right.name === 'H' && left.value === 0) {
+      return errAt(
+        token,
+        `'0 - H' is not expressible directly; use the unary form '-H' instead.`,
+      );
+    }
+    if (isBBusReg(right.name) && left.value === 0) {
+      return errAt(
+        token,
+        `'0 - ${right.name}' is not expressible directly; use the unary form '-${right.name}' instead.`,
+      );
+    }
   }
   return errAt(token, `Unsupported subtraction`);
 }
@@ -386,20 +454,40 @@ export function encodeLine(parsedLine: ParsedLine): {
         gotoSeen = true;
         if (s.flag === 'N') jam.JAMN = true;
         else jam.JAMZ = true;
-        const t = s.target;
-        if (t.kind === 'label') {
-          unresolvedNext = {
-            kind: 'label',
-            name: t.name,
-            jam: { ...jam },
-            line: t.token.line,
-            column: t.token.column,
-          };
-        } else if (t.kind === 'addr') {
-          unresolvedNext = { kind: 'absolute', address: t.value, jam: { ...jam } };
-        } else {
+
+        // Reject indirect MBR targets in either clause.
+        if (s.target.kind === 'mbr' || (s.elseTarget && s.elseTarget.kind === 'mbr')) {
           errors.push(diagnostic(s.token, `'if' cannot use indirect MBR target`));
+          return;
         }
+
+        // The JAM mechanism ORs bit 8 into NEXT_ADDR when the condition is
+        // true. So the "JAM-taken" target lives in 0x100..0x1FF, and the
+        // "fall-through" target is its low-half twin. Negation just swaps
+        // which user-facing label is which.
+        const jamTakenSrc = s.negated ? s.elseTarget : s.target;
+        const fallThroughSrc = s.negated ? s.target : s.elseTarget;
+
+        unresolvedNext = {
+          kind: 'if-pair',
+          jam: { ...jam },
+          ...(jamTakenSrc && {
+            jamTaken: {
+              target: jamTakenSrc,
+              line: jamTakenSrc.token.line,
+              column: jamTakenSrc.token.column,
+            },
+          }),
+          ...(fallThroughSrc && {
+            fallThrough: {
+              target: fallThroughSrc,
+              line: fallThroughSrc.token.line,
+              column: fallThroughSrc.token.column,
+            },
+          }),
+          line: s.token.line,
+          column: s.token.column,
+        };
       },
     });
   }

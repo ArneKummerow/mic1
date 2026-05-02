@@ -8,9 +8,10 @@
  * conditional branch — the bit-8 layout is non-obvious).
  */
 import type { Monaco } from '@monaco-editor/react';
-import type { editor as monacoEditor, languages, IRange } from 'monaco-editor';
+import type { editor as monacoEditor, languages, IRange, Position } from 'monaco-editor';
 import { useAppStore } from '../store';
 import { OPCODES, OPCODES_BY_MNEMONIC } from '../engine/ijvm';
+import { formatMal } from '../engine/mal/formatter';
 
 // ─── MAL reference content ────────────────────────────────────────────
 
@@ -285,6 +286,34 @@ function registerMalProviders(monaco: Monaco): void {
       return { suggestions };
     },
   });
+
+  // Goto-definition for MAL labels.
+  monaco.languages.registerDefinitionProvider('mal', {
+    provideDefinition: (model, position) => {
+      const tok = tokenAt(model, position);
+      if (!tok) return null;
+      const def = findMalLabelDefinition(model, tok.word);
+      return def ? [{ uri: model.uri, range: def }] : null;
+    },
+  });
+
+  // Find-references for MAL labels.
+  monaco.languages.registerReferenceProvider('mal', {
+    provideReferences: (model, position) => {
+      const tok = tokenAt(model, position);
+      if (!tok) return null;
+      return findMalReferences(model, tok.word).map((range) => ({ uri: model.uri, range }));
+    },
+  });
+
+  // Document formatter — wired up to Monaco's "Format Document" action so
+  // the standard Shift+Alt+F shortcut works as well as the Format button
+  // we render in the editor wrapper.
+  monaco.languages.registerDocumentFormattingEditProvider('mal', {
+    provideDocumentFormattingEdits: (model) => [
+      { range: model.getFullModelRange(), text: formatMal(model.getValue()) },
+    ],
+  });
 }
 
 function registerIjvmProviders(monaco: Monaco): void {
@@ -463,4 +492,222 @@ function registerIjvmProviders(monaco: Monaco): void {
       return { suggestions: deduped };
     },
   });
+
+  // Goto-definition for IJVM labels, methods, vars, and constants.
+  monaco.languages.registerDefinitionProvider('ijvm', {
+    provideDefinition: (model, position) => {
+      const tok = tokenAt(model, position);
+      if (!tok) return null;
+      const def = findIjvmDefinition(model, tok.word, position);
+      return def ? [{ uri: model.uri, range: def }] : null;
+    },
+  });
+
+  // Find-references for IJVM symbols.
+  monaco.languages.registerReferenceProvider('ijvm', {
+    provideReferences: (model, position) => {
+      const tok = tokenAt(model, position);
+      if (!tok) return null;
+      return findIjvmReferences(model, tok.word).map((range) => ({ uri: model.uri, range }));
+    },
+  });
+}
+
+// ─── Symbol search helpers ────────────────────────────────────────────
+
+/** Strip a `// ...` line comment without splitting a literal `/` (none in MAL/IJVM). */
+function stripLineComment(line: string): string {
+  const idx = line.indexOf('//');
+  return idx === -1 ? line : line.slice(0, idx);
+}
+
+function rangeForWordOnLine(
+  lineNumber: number,
+  startCol0: number,
+  word: string,
+): IRange {
+  return {
+    startLineNumber: lineNumber,
+    startColumn: startCol0 + 1,
+    endLineNumber: lineNumber,
+    endColumn: startCol0 + 1 + word.length,
+  };
+}
+
+/** Iterate `name` occurrences in `text` as standalone words, respecting `//` comments. */
+function* findWordOccurrences(
+  text: string,
+  word: string,
+): Generator<{ line: number; column0: number }> {
+  const re = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'g');
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const noComment = stripLineComment(lines[i]);
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(noComment)) !== null) {
+      yield { line: i + 1, column0: m.index };
+    }
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ─── MAL symbol resolution ────────────────────────────────────────────
+
+/**
+ * Find the source-side label definition for `name` in a MAL document. A label
+ * is the first identifier on a line, optionally followed by `:` or
+ * `= 0xADDR` (the explicit-address directive).
+ */
+function findMalLabelDefinition(
+  model: monacoEditor.ITextModel,
+  name: string,
+): IRange | null {
+  const text = model.getValue();
+  const lines = text.split('\n');
+  // Reuse the parser's "is this an identifier a register or reserved keyword?"
+  // heuristic by hand. Anything else at the start of a line is a label.
+  const RESERVED = new Set([
+    'rd', 'wr', 'fetch', 'goto', 'if', 'else',
+    'RD', 'WR', 'FETCH', 'GOTO', 'IF', 'ELSE',
+    'AND', 'OR', 'N', 'Z',
+    'MAR', 'MDR', 'PC', 'MBR', 'MBRU', 'SP', 'LV', 'CPP', 'TOS', 'OPC', 'H',
+  ]);
+  if (RESERVED.has(name)) return null;
+  for (let i = 0; i < lines.length; i++) {
+    const stripped = stripLineComment(lines[i]);
+    const m = stripped.match(/^\s*([A-Za-z_]\w*)\b/);
+    if (!m || m[1] !== name) continue;
+    if (RESERVED.has(m[1])) continue;
+    const col0 = m[0].length - m[1].length;
+    return rangeForWordOnLine(i + 1, col0, name);
+  }
+  return null;
+}
+
+function findMalReferences(model: monacoEditor.ITextModel, name: string): IRange[] {
+  const out: IRange[] = [];
+  for (const occ of findWordOccurrences(model.getValue(), name)) {
+    out.push(rangeForWordOnLine(occ.line, occ.column0, name));
+  }
+  return out;
+}
+
+// ─── IJVM symbol resolution ───────────────────────────────────────────
+
+interface IjvmDefMatch {
+  range: IRange;
+  /** Match priority — lower wins when several patterns match the same name. */
+  priority: number;
+}
+
+/**
+ * Find the definition site for `name`. We search the source for, in order:
+ *   - `.method name(...)` (and the named args inside its parens),
+ *   - `.var name`,
+ *   - `.const name` / `.constant name`,
+ *   - `name:` as a branch label.
+ *
+ * `position` is used as a tiebreaker for `name` inside a `.method` parameter
+ * list: if the cursor is on an arg, the corresponding parameter's range
+ * wins over an unrelated definition with the same name elsewhere.
+ */
+function findIjvmDefinition(
+  model: monacoEditor.ITextModel,
+  name: string,
+  position: Position,
+): IRange | null {
+  const text = model.getValue();
+  const lines = text.split('\n');
+  const matches: IjvmDefMatch[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const stripped = stripLineComment(lines[i]);
+
+    // .method NAME(args)
+    const methodMatch = stripped.match(/^(\s*)\.method\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    if (methodMatch) {
+      const methodName = methodMatch[2];
+      const nameStart = methodMatch[1].length + '.method'.length + 1;
+      // The actual name might be padded by extra spaces — re-locate:
+      const methodNameCol0 = stripped.indexOf(methodName, nameStart);
+      if (methodName === name && methodNameCol0 >= 0) {
+        matches.push({
+          range: rangeForWordOnLine(i + 1, methodNameCol0, name),
+          priority: 1,
+        });
+      }
+      // Args: scan the parenthesised list.
+      const argListStart = stripped.indexOf('(');
+      const args = methodMatch[3];
+      let cursor = argListStart + 1;
+      for (const arg of args.split(',')) {
+        const trimmed = arg.trim();
+        if (trimmed && trimmed === name) {
+          const argCol0 = stripped.indexOf(trimmed, cursor);
+          if (argCol0 >= 0) {
+            // Args defined here are scoped to this method; if the cursor is
+            // inside the argument list itself or after this `.method`, this
+            // is a strong candidate.
+            const cursorOnArgLine = position.lineNumber === i + 1;
+            matches.push({
+              range: rangeForWordOnLine(i + 1, argCol0, name),
+              priority: cursorOnArgLine ? 0 : 2,
+            });
+          }
+        }
+        cursor += arg.length + 1; // +1 for the comma
+      }
+      continue;
+    }
+
+    // .var NAME
+    const varMatch = stripped.match(/^(\s*)\.var\s+([A-Za-z_]\w*)/);
+    if (varMatch && varMatch[2] === name) {
+      const col0 = varMatch[1].length + '.var '.length;
+      matches.push({
+        range: rangeForWordOnLine(i + 1, col0, name),
+        priority: 2,
+      });
+      continue;
+    }
+
+    // .const NAME / .constant NAME
+    const constMatch = stripped.match(/^(\s*)\.const(?:ant)?\s+([A-Za-z_]\w*)/);
+    if (constMatch && constMatch[2] === name) {
+      const directive = constMatch[0].includes('.constant') ? '.constant ' : '.const ';
+      const col0 = constMatch[1].length + directive.length;
+      matches.push({
+        range: rangeForWordOnLine(i + 1, col0, name),
+        priority: 1,
+      });
+      continue;
+    }
+
+    // NAME:  (branch label at start of line)
+    const labelMatch = stripped.match(/^(\s*)([A-Za-z_]\w*)\s*:/);
+    if (labelMatch && labelMatch[2] === name) {
+      const col0 = labelMatch[1].length;
+      matches.push({
+        range: rangeForWordOnLine(i + 1, col0, name),
+        priority: 1,
+      });
+      continue;
+    }
+  }
+
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => a.priority - b.priority);
+  return matches[0].range;
+}
+
+function findIjvmReferences(model: monacoEditor.ITextModel, name: string): IRange[] {
+  const out: IRange[] = [];
+  for (const occ of findWordOccurrences(model.getValue(), name)) {
+    out.push(rangeForWordOnLine(occ.line, occ.column0, name));
+  }
+  return out;
 }

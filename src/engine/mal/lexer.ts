@@ -15,6 +15,7 @@ export type TokenType =
   | 'PLUS'
   | 'MINUS'
   | 'TILDE'
+  | 'BANG'
   | 'LPAREN'
   | 'RPAREN'
   | 'LSHIFT'
@@ -93,6 +94,7 @@ export function lex(source: string): LexResult {
       '+': 'PLUS',
       '-': 'MINUS',
       '~': 'TILDE',
+      '!': 'BANG',
       '(': 'LPAREN',
       ')': 'RPAREN',
     };

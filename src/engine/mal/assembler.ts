@@ -11,6 +11,7 @@ import { lex } from './lexer';
 import { parse } from './parser';
 import type { ParsedLine } from './parser';
 import { encodeLine, type AssemblyError, type EncodedLine, type UnresolvedNext } from './encoder';
+import type { GotoTarget } from './parser';
 import type { Microinstruction } from '../types';
 
 export const CONTROL_STORE_SIZE = 512;
@@ -143,6 +144,9 @@ function resolveNext(
     }
     return validatedJamGoto(addr, u.jam, errors, { line: u.line, column: u.column });
   }
+  if (u.kind === 'if-pair') {
+    return resolveIfPair(u, labels, errors);
+  }
   // mbr
   let baseAddr = 0;
   if (u.orLabel) {
@@ -168,6 +172,91 @@ function resolveNext(
     jam: { ...encoded.instr.jam, JMPC: true },
     errors,
   };
+}
+
+function resolveTarget(
+  target: GotoTarget,
+  labels: Map<string, number>,
+  errors: AssemblyError[],
+  loc: { line: number; column: number },
+): number | undefined {
+  if (target.kind === 'addr') return target.value;
+  if (target.kind === 'label') {
+    const addr = labels.get(target.name);
+    if (addr === undefined) {
+      errors.push({ line: loc.line, column: loc.column, message: `Unknown label '${target.name}'` });
+      return undefined;
+    }
+    return addr;
+  }
+  // 'mbr' is rejected at parse-to-encoding time for if-statements; ignore here.
+  return undefined;
+}
+
+function resolveIfPair(
+  u: Extract<UnresolvedNext, { kind: 'if-pair' }>,
+  labels: Map<string, number>,
+  errors: AssemblyError[],
+): Resolved {
+  const loc = { line: u.line, column: u.column };
+  const jamTakenAddr = u.jamTaken
+    ? resolveTarget(u.jamTaken.target, labels, errors, {
+        line: u.jamTaken.line,
+        column: u.jamTaken.column,
+      })
+    : undefined;
+  const fallThroughAddr = u.fallThrough
+    ? resolveTarget(u.fallThrough.target, labels, errors, {
+        line: u.fallThrough.line,
+        column: u.fallThrough.column,
+      })
+    : undefined;
+
+  if (jamTakenAddr === undefined && fallThroughAddr === undefined) {
+    return { nextAddress: 0, jam: u.jam, errors };
+  }
+
+  // Validate ranges and bit-8 invariant.
+  if (jamTakenAddr !== undefined) {
+    if (jamTakenAddr < 0 || jamTakenAddr >= CONTROL_STORE_SIZE) {
+      errors.push({ ...loc, message: `Goto target 0x${jamTakenAddr.toString(16)} out of range` });
+      return { nextAddress: 0, jam: u.jam, errors };
+    }
+    if ((jamTakenAddr & 0x100) === 0) {
+      errors.push({
+        ...loc,
+        message: `Conditional taken-branch target 0x${jamTakenAddr.toString(16)} must be in 0x100..0x1FF (the JAM mechanism only sets bit 8). Place the taken-branch microinstruction in the upper half and the fall-through at 0x${(jamTakenAddr & 0xff).toString(16).padStart(2, '0')}.`,
+      });
+    }
+  }
+  if (fallThroughAddr !== undefined) {
+    if (fallThroughAddr < 0 || fallThroughAddr >= CONTROL_STORE_SIZE) {
+      errors.push({ ...loc, message: `Goto target 0x${fallThroughAddr.toString(16)} out of range` });
+      return { nextAddress: 0, jam: u.jam, errors };
+    }
+    if ((fallThroughAddr & 0x100) !== 0) {
+      errors.push({
+        ...loc,
+        message: `Conditional fall-through target 0x${fallThroughAddr.toString(16)} must be in 0x000..0x0FF (the JAM mechanism only sets bit 8, so the not-taken path stays in the low half).`,
+      });
+    }
+  }
+  if (jamTakenAddr !== undefined && fallThroughAddr !== undefined) {
+    if ((jamTakenAddr & 0xff) !== (fallThroughAddr & 0xff)) {
+      errors.push({
+        ...loc,
+        message: `Conditional taken (0x${jamTakenAddr.toString(16)}) and fall-through (0x${fallThroughAddr.toString(16)}) targets must share the low byte; the JAM mechanism only ORs bit 8 onto NEXT_ADDR.`,
+      });
+    }
+  }
+
+  // NEXT_ADDR holds the fall-through address (low half). When JAM fires, bit 8
+  // gets ORed in to reach the taken target.
+  const lowByte =
+    fallThroughAddr !== undefined
+      ? fallThroughAddr & 0xff
+      : ((jamTakenAddr ?? 0) & 0xff);
+  return { nextAddress: lowByte, jam: u.jam, errors };
 }
 
 function validatedJamGoto(

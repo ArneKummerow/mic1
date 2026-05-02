@@ -15,6 +15,57 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
 let initialized = false;
 
+export const MIC1_DARK_THEME = 'mic1-dark';
+export const MIC1_LIGHT_THEME = 'mic1-light';
+
+const DARK_THEME_DATA: monaco.editor.IStandaloneThemeData = {
+  base: 'vs-dark',
+  inherit: true,
+  rules: [
+    { token: 'comment', foreground: '6b7480', fontStyle: 'italic' },
+    { token: 'keyword', foreground: 'f0883e' },
+    { token: 'keyword.operator', foreground: 'f0883e' },
+    { token: 'variable.predefined', foreground: '58a6ff' },
+    { token: 'constant', foreground: 'f0e442' },
+    { token: 'number', foreground: '94de4a' },
+    { token: 'number.hex', foreground: '94de4a' },
+    { token: 'type.identifier', foreground: 'cc79a7', fontStyle: 'bold' },
+    { token: 'operator', foreground: 'e6edf3' },
+  ],
+  colors: {
+    'editor.background': '#161b22',
+    'editor.foreground': '#e6edf3',
+    'editorLineNumber.foreground': '#6b7480',
+    'editorLineNumber.activeForeground': '#9da7b0',
+    'editor.selectionBackground': '#2a313a',
+    'editor.lineHighlightBackground': '#1f242c',
+  },
+};
+
+const LIGHT_THEME_DATA: monaco.editor.IStandaloneThemeData = {
+  base: 'vs',
+  inherit: true,
+  rules: [
+    { token: 'comment', foreground: '6e7781', fontStyle: 'italic' },
+    { token: 'keyword', foreground: 'cf222e' },
+    { token: 'keyword.operator', foreground: 'cf222e' },
+    { token: 'variable.predefined', foreground: '0969da' },
+    { token: 'constant', foreground: '8250df' },
+    { token: 'number', foreground: '0550ae' },
+    { token: 'number.hex', foreground: '0550ae' },
+    { token: 'type.identifier', foreground: 'a83289', fontStyle: 'bold' },
+    { token: 'operator', foreground: '24292f' },
+  ],
+  colors: {
+    'editor.background': '#ffffff',
+    'editor.foreground': '#1f2328',
+    'editorLineNumber.foreground': '#8b949e',
+    'editorLineNumber.activeForeground': '#57606a',
+    'editor.selectionBackground': '#dbe7ff',
+    'editor.lineHighlightBackground': '#f6f8fa',
+  },
+};
+
 export function setupMonaco(): void {
   if (initialized) return;
   initialized = true;
@@ -28,4 +79,12 @@ export function setupMonaco(): void {
   };
 
   loader.config({ monaco });
+
+  // Pre-define both themes so any editor can switch via `setTheme()` alone.
+  monaco.editor.defineTheme(MIC1_DARK_THEME, DARK_THEME_DATA);
+  monaco.editor.defineTheme(MIC1_LIGHT_THEME, LIGHT_THEME_DATA);
+}
+
+export function monacoThemeName(theme: 'dark' | 'light'): string {
+  return theme === 'light' ? MIC1_LIGHT_THEME : MIC1_DARK_THEME;
 }

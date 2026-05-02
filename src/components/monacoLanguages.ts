@@ -21,7 +21,7 @@ export function registerMonacoLanguages(monaco: Monaco): void {
     tokenizer: {
       root: [
         [/\/\/.*$/, 'comment'],
-        [/\b(rd|wr|fetch|goto|if)\b/, 'keyword'],
+        [/\b(rd|wr|fetch|goto|if|else)\b/, 'keyword'],
         [/\b(AND|OR)\b/, 'keyword.operator'],
         [
           /\b(MAR|MDR|PC|MBR|MBRU|SP|LV|CPP|TOS|OPC|H)\b/,
@@ -33,7 +33,7 @@ export function registerMonacoLanguages(monaco: Monaco): void {
         [/[A-Za-z_][A-Za-z0-9_]*/, 'identifier'],
         [/[=;:,()]/, 'delimiter'],
         [/<<|>>/, 'operator'],
-        [/[-+~]/, 'operator'],
+        [/[-+~!]/, 'operator'],
       ],
     },
   });
