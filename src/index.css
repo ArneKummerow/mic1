@@ -57,13 +57,25 @@
 }
 
 :root {
+  /*
+   * Type scale. All HTML font-size declarations elsewhere should pull from
+   * one of these four steps; that keeps the chrome (toolbar, tab bars,
+   * dropdowns) and the panel content aligned. SVG text in the data path
+   * and the tight BitView grid keep explicit sizes — they're positionally
+   * constrained.
+   */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14px;
+
   font-family:
     system-ui,
     -apple-system,
     'Segoe UI',
     Roboto,
     sans-serif;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   line-height: 1.4;
 }
 

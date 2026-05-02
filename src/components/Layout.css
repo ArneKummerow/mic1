@@ -16,7 +16,7 @@
   --dv-background-color: var(--bg-1);
   --dv-paneview-active-outline-color: var(--accent);
   --dv-tabs-and-actions-container-background-color: var(--bg-1);
-  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-font-size: var(--fs-md);
   --dv-tabs-and-actions-container-height: 30px;
   --dv-tab-divider-color: var(--border);
   --dv-separator-border: var(--border);
@@ -42,7 +42,7 @@
   align-items: center;
   height: 100%;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-weight: 500;
   color: var(--fg-2);
   cursor: pointer;

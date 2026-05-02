@@ -21,7 +21,7 @@
   flex: 1 1 auto;
   overflow: auto;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--fs-md);
   white-space: pre-wrap;
   word-break: break-word;
   background: var(--bg-1);
@@ -54,7 +54,7 @@
   border-radius: 3px;
   padding: 4px 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .input:focus {
@@ -68,13 +68,13 @@
   padding: 4px 10px;
   background: var(--bg-1);
   border-top: 1px solid var(--bg-3);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .bufferLabel {
   color: var(--fg-3);
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.04em;
 }
 
@@ -86,7 +86,7 @@
   margin-right: auto;
   color: var(--accent);
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   animation: pulse 1.6s ease-in-out infinite;
 }
 
@@ -101,7 +101,7 @@
 }
 
 .clearBtn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   text-transform: lowercase;
   height: 20px;
   padding: 0 6px;

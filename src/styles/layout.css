@@ -31,7 +31,7 @@
 
 .panel-header {
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -52,5 +52,5 @@
 .placeholder {
   padding: 1.5rem;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--fs-md);
 }

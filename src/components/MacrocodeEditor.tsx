@@ -184,7 +184,7 @@ export function MacrocodeEditor(): JSX.Element {
           onMount={handleMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 12,
+            fontSize: 13,
             lineNumbers: 'on',
             lineNumbersMinChars: 6,
             glyphMargin: true,

@@ -3,7 +3,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -32,7 +32,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   height: 22px;
   white-space: nowrap;
   overflow: hidden;

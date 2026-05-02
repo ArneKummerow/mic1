@@ -186,7 +186,7 @@ export function MicrocodeEditor(): JSX.Element {
           onMount={handleMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 12,
+            fontSize: 13,
             lineNumbers: 'on',
             lineNumbersMinChars: 5,
             glyphMargin: true,

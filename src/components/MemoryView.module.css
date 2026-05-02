@@ -15,7 +15,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 
@@ -78,7 +78,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--fg-2);
 }
 
@@ -89,7 +89,7 @@
   border-radius: 3px;
   padding: 1px 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .fixedInput {
@@ -98,7 +98,7 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1px 4px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   width: 80px;
 }
 
