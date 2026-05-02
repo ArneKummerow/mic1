@@ -3,7 +3,7 @@ import { FixedSizeList } from 'react-window';
 import { useAppStore } from '../store';
 import type { Microinstruction } from '../engine/types';
 import { CONTROL_STORE_SIZE } from '../engine/mal';
-import { BitFieldRow, BIT_FIELDS_WIDTH, BIT_ROW_HEIGHT } from './BitView';
+import { BitFieldRow, BIT_FIELDS_WIDTH, bitRowHeight } from './BitView';
 import styles from './ControlStoreView.module.css';
 
 const TEXT_ROW_HEIGHT = 22;
@@ -227,7 +227,7 @@ export function ControlStoreView(): JSX.Element {
     [items, controlStore, mpc, breakpoints, toggleBreakpoint, bitView],
   );
 
-  const rowHeight = bitView ? BIT_ROW_HEIGHT : TEXT_ROW_HEIGHT;
+  const rowHeight = bitView ? bitRowHeight() : TEXT_ROW_HEIGHT;
 
   return (
     <div className="panel">

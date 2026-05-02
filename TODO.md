@@ -43,12 +43,6 @@ What remains is language-tool polish and stretch goals.
       with `autoUpdate` + Workbox. After first load the simulator is
       fully cached and runs offline.
 
-## Documentation
-
-- [ ] **Tutorial / walkthrough** for new students: trace one IJVM
-      instruction end-to-end through Main1 → handler → memory → datapath.
-      Could live as a Markdown page or as guided tooltips inside the app.
-
 ## Other MICs
 
 - [ ] **MIC-2 / MIC-3 / MIC-4 variants** — instruction prefetch,

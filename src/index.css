@@ -59,15 +59,16 @@
 :root {
   /*
    * Type scale. All HTML font-size declarations elsewhere should pull from
-   * one of these four steps; that keeps the chrome (toolbar, tab bars,
-   * dropdowns) and the panel content aligned. SVG text in the data path
-   * and the tight BitView grid keep explicit sizes — they're positionally
+   * one of these six steps; that keeps the chrome (toolbar, tab bars,
+   * dropdowns), the panel content, and dense bit-level layouts aligned.
+   * SVG text in the data path keeps explicit sizes — it's positionally
    * constrained.
    */
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --fs-lg: 14px;
+  --fs-2xs: 13px;
+  --fs-xs: 14px;
+  --fs-sm: 15px;
+  --fs-md: 16px;
+  --fs-lg: 17px;
 
   font-family:
     system-ui,
@@ -141,8 +142,8 @@ code,
 .mic1-bp-glyph {
   /* Red dot in the glyph margin. Positioned via background-image so it
      coexists with `.mic1-current-glyph` on the same line. */
-  background:
-    radial-gradient(circle at center, var(--error) 0 4px, transparent 5px) no-repeat center;
+  background: radial-gradient(circle at center, var(--error) 0 4px, transparent 5px) no-repeat
+    center;
   width: 12px !important;
   cursor: pointer;
 }

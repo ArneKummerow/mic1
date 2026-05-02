@@ -88,3 +88,16 @@ export function setupMonaco(): void {
 export function monacoThemeName(theme: 'dark' | 'light'): string {
   return theme === 'light' ? MIC1_LIGHT_THEME : MIC1_DARK_THEME;
 }
+
+/**
+ * Read a CSS custom property (e.g. `--fs-md`) off the document root and
+ * return it as a number of pixels. Lets components that need a numeric
+ * font size — like Monaco's `fontSize` option, which doesn't accept a
+ * CSS value — track the same type scale as the rest of the app.
+ */
+export function cssFontSize(name: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : fallback;
+}

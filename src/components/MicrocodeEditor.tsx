@@ -3,7 +3,7 @@ import Editor, { type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../store';
 import { registerMonacoLanguages } from './monacoLanguages';
-import { monacoThemeName } from './monacoSetup';
+import { monacoThemeName, cssFontSize } from './monacoSetup';
 import styles from './CodeEditor.module.css';
 
 function fmtMpc(addr: number): string {
@@ -186,7 +186,7 @@ export function MicrocodeEditor(): JSX.Element {
           onMount={handleMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 13,
+            fontSize: cssFontSize('--fs-md', 13),
             lineNumbers: 'on',
             lineNumbersMinChars: 5,
             glyphMargin: true,

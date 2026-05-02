@@ -13,14 +13,31 @@
   flex-shrink: 0;
 }
 
-.colSpacer { flex: 0 0 16px; }
-.addrCol   { flex: 0 0 50px; }
-.labelCol  { flex: 0 0 70px; }
-.aluCol    { flex: 1 1 auto; min-width: 70px; }
-.cBusCol   { flex: 0 0 70px; }
-.memCol    { flex: 0 0 50px; }
-.nextCol   { flex: 0 0 60px; }
-.jamCol    { flex: 0 0 80px; }
+.colSpacer {
+  flex: 0 0 16px;
+}
+.addrCol {
+  flex: 0 0 50px;
+}
+.labelCol {
+  flex: 0 0 70px;
+}
+.aluCol {
+  flex: 1 1 auto;
+  min-width: 70px;
+}
+.cBusCol {
+  flex: 0 0 70px;
+}
+.memCol {
+  flex: 0 0 50px;
+}
+.nextCol {
+  flex: 0 0 60px;
+}
+.jamCol {
+  flex: 0 0 80px;
+}
 
 .listContainer {
   flex: 1 1 auto;
@@ -45,13 +62,36 @@
   white-space: nowrap;
 }
 
-.row .addr     { flex: 0 0 50px; color: var(--fg-2); }
-.row .label    { flex: 0 0 70px; color: var(--fg-2); font-style: italic; }
-.row .alu      { flex: 1 1 auto; min-width: 70px; color: var(--fg-1); }
-.row .cBus     { flex: 0 0 70px; color: var(--accent); }
-.row .mem      { flex: 0 0 50px; color: var(--mem-fetch); }
-.row .next     { flex: 0 0 60px; color: var(--fg-2); }
-.row .jam      { flex: 0 0 80px; color: var(--accent-2); }
+.row .addr {
+  flex: 0 0 50px;
+  color: var(--fg-2);
+}
+.row .label {
+  flex: 0 0 70px;
+  color: var(--fg-2);
+  font-style: italic;
+}
+.row .alu {
+  flex: 1 1 auto;
+  min-width: 70px;
+  color: var(--fg-1);
+}
+.row .cBus {
+  flex: 0 0 70px;
+  color: var(--accent);
+}
+.row .mem {
+  flex: 0 0 50px;
+  color: var(--mem-fetch);
+}
+.row .next {
+  flex: 0 0 60px;
+  color: var(--fg-2);
+}
+.row .jam {
+  flex: 0 0 80px;
+  color: var(--accent-2);
+}
 
 .currentRow {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -98,7 +138,7 @@
 
 .gapText {
   flex: 1 1 auto;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   color: var(--fg-3);
   text-align: center;
 }

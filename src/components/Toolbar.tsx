@@ -8,6 +8,7 @@ import {
   FastForward,
   AlertTriangle,
   Square,
+  BookOpen,
 } from 'lucide-react';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
 import { ViewMenu } from './ViewMenu';
@@ -16,7 +17,11 @@ import styles from './Toolbar.module.css';
 
 const SPEED_PRESETS = [1, 2, 4, 10, 50, 200, 1000, 10000];
 
-export function Toolbar(): JSX.Element {
+interface ToolbarProps {
+  onOpenDocs: () => void;
+}
+
+export function Toolbar({ onOpenDocs }: ToolbarProps): JSX.Element {
   const mode = useAppStore((s) => s.mode);
   const speed = useAppStore((s) => s.speed);
   const errorCount = useAppStore((s) => (s.microAssembly?.errors.length ?? 0) + (s.ijvmAssembly?.errors.length ?? 0));
@@ -107,6 +112,10 @@ export function Toolbar(): JSX.Element {
       <div className={styles.right}>
         <FileMenu />
         <ViewMenu />
+        <button onClick={onOpenDocs} title="Open documentation" aria-label="Open documentation">
+          <BookOpen size={14} />
+          <span>Docs</span>
+        </button>
         <StatusPill mode={mode} hasErrors={hasErrors} errorCount={errorCount} mpc={lastTrace?.mpcAfter ?? 0} />
       </div>
     </div>

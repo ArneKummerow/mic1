@@ -69,9 +69,8 @@
 
 .vchar {
   display: block;
-  height: 8px;
-  font-size: 9px;
-  line-height: 8px;
+  font-size: var(--fs-xs);
+  line-height: 1;
   text-align: center;
 }
 
@@ -88,7 +87,7 @@
 
 /* NEXT cell — horizontal hex value. */
 .nextValue {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--fg-1);
   white-space: nowrap;

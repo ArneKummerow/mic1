@@ -142,11 +142,36 @@ export const BIT_FIELDS_WIDTH = (() => {
 })();
 
 /**
- * Recommended row height for a bit-view row. Tall enough for the longest
- * vertical inscription (`INVA` / `MBRU` — 4 letters × 8px char box) plus
- * a small padding.
+ * Longest vertical inscription across both bit cells (field labels like
+ * `JMPC`, `INVA`) and B-bus cells (register names like `MBRU`). Drives
+ * the row height — each character takes one `--fs-xs`-tall line.
  */
-export const BIT_ROW_HEIGHT = 34;
+const MAX_VLABEL_CHARS = (() => {
+  let max = 0;
+  for (const f of BIT_FIELDS) max = Math.max(max, f.label.length);
+  // B-bus register names: 'MBRU' is the longest (4 chars).
+  return Math.max(max, 4);
+})();
+
+const ROW_HEIGHT_PADDING = 4;
+const ROW_HEIGHT_FALLBACK_FS = 11;
+
+/**
+ * Recommended row height for a bit-view row. Reads `--fs-xs` at call
+ * time so the row scales with the type scale; tall enough for the
+ * longest vertical inscription plus a small padding.
+ */
+export function bitRowHeight(): number {
+  let charPx = ROW_HEIGHT_FALLBACK_FS;
+  if (typeof window !== 'undefined') {
+    const raw = getComputedStyle(document.documentElement)
+      .getPropertyValue('--fs-xs')
+      .trim();
+    const n = parseFloat(raw);
+    if (Number.isFinite(n)) charPx = n;
+  }
+  return Math.ceil(charPx * MAX_VLABEL_CHARS + ROW_HEIGHT_PADDING);
+}
 
 function fmtNext9(addr: number): string {
   return '0x' + (addr & 0x1ff).toString(16).toUpperCase().padStart(3, '0');
