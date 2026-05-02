@@ -1,75 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Eye } from 'lucide-react';
+import { Eye, Sun, Moon, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../store';
 import { PANEL_DEFS } from './panels';
-import styles from './ViewMenu.module.css';
-
-interface ViewMenuProps {
-  open: boolean;
-  setOpen: (v: boolean) => void;
-}
+import { resetLayout } from './layoutApi';
+import {
+  Dropdown,
+  MenuItem,
+  MenuCheckbox,
+  MenuSeparator,
+  MenuGroupLabel,
+} from './Dropdown';
 
 /**
- * Toolbar dropdown for view-related preferences: which panels are visible
- * and whether tab bars are shown. Theme has its own dedicated toggle next
- * to this menu.
- *
- * The popover is rendered through a portal because the toolbar uses
- * `overflow: hidden` to keep its row layout tidy — without the portal the
- * dropdown would be clipped and invisible.
+ * Toolbar dropdown for view-related preferences: theme, layout reset, tab
+ * bar visibility, and which panels are visible.
  */
-export function ViewMenu({ open, setOpen }: ViewMenuProps): JSX.Element {
+export function ViewMenu(): JSX.Element {
+  const theme = useAppStore((s) => s.uiPrefs.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
   const hiddenPanels = useAppStore((s) => s.uiPrefs.hiddenPanels);
   const hideTabBars = useAppStore((s) => s.uiPrefs.hideTabBars);
   const setHiddenPanels = useAppStore((s) => s.setHiddenPanels);
   const setHideTabBars = useAppStore((s) => s.setHideTabBars);
-
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
-
-  // Compute the popover position from the trigger button's bounding rect
-  // so it lines up with the button regardless of toolbar overflow clipping.
-  useEffect(() => {
-    if (!open) return;
-    const update = (): void => {
-      const btn = buttonRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      });
-    };
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [open]);
-
-  // Click-outside / Escape closes the menu.
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: PointerEvent): void => {
-      const target = e.target as Node;
-      if (buttonRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open, setOpen]);
+  const controlStoreBitView = useAppStore((s) => s.uiPrefs.controlStoreBitView);
+  const controlStoreHideEmpty = useAppStore((s) => s.uiPrefs.controlStoreHideEmpty);
+  const setControlStoreBitView = useAppStore((s) => s.setControlStoreBitView);
+  const setControlStoreHideEmpty = useAppStore((s) => s.setControlStoreHideEmpty);
 
   const togglePanel = (id: string): void => {
     const next = new Set(hiddenPanels);
@@ -79,52 +34,52 @@ export function ViewMenu({ open, setOpen }: ViewMenuProps): JSX.Element {
   };
 
   return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setOpen(!open)}
-        title="Show / hide panels and tab bars"
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <Eye size={14} />
-        <span>View</span>
-      </button>
-      {open && pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className={styles.menu}
-            role="menu"
-            style={{ top: pos.top, right: pos.right }}
+    <Dropdown label="View" icon={<Eye size={14} />} title="Theme, layout, panels">
+      {({ close }) => (
+        <>
+          <MenuItem
+            onClick={() => {
+              toggleTheme();
+              close();
+            }}
           >
-            <label className={styles.row}>
-              <input
-                type="checkbox"
-                checked={hideTabBars}
-                onChange={(e) => setHideTabBars(e.target.checked)}
-              />
-              <span>Hide tab bars</span>
-            </label>
-            <div className={styles.separator} />
-            <div className={styles.groupLabel}>Panels</div>
-            {PANEL_DEFS.map((p) => {
-              const visible = !hiddenPanels.includes(p.id);
-              return (
-                <label key={p.id} className={styles.row}>
-                  <input
-                    type="checkbox"
-                    checked={visible}
-                    onChange={() => togglePanel(p.id)}
-                  />
-                  <span>{p.title}</span>
-                </label>
-              );
-            })}
-          </div>,
-          document.body,
-        )}
-    </>
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            <span>Switch to {theme === 'dark' ? 'light' : 'dark'} theme</span>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              resetLayout();
+              close();
+            }}
+          >
+            <LayoutGrid size={14} />
+            <span>Reset layout</span>
+          </MenuItem>
+          <MenuSeparator />
+          <MenuCheckbox checked={hideTabBars} onChange={setHideTabBars}>
+            Hide tab bars
+          </MenuCheckbox>
+          <MenuSeparator />
+          <MenuGroupLabel>Control Store</MenuGroupLabel>
+          <MenuCheckbox checked={controlStoreBitView} onChange={setControlStoreBitView}>
+            Bit view
+          </MenuCheckbox>
+          <MenuCheckbox checked={controlStoreHideEmpty} onChange={setControlStoreHideEmpty}>
+            Hide empty rows
+          </MenuCheckbox>
+          <MenuSeparator />
+          <MenuGroupLabel>Panels</MenuGroupLabel>
+          {PANEL_DEFS.map((p) => (
+            <MenuCheckbox
+              key={p.id}
+              checked={!hiddenPanels.includes(p.id)}
+              onChange={() => togglePanel(p.id)}
+            >
+              {p.title}
+            </MenuCheckbox>
+          ))}
+        </>
+      )}
+    </Dropdown>
   );
 }

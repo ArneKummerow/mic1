@@ -179,8 +179,6 @@ export function ControlStoreView(): JSX.Element {
 
   const bitView = useAppStore((s) => s.uiPrefs.controlStoreBitView);
   const hideEmpty = useAppStore((s) => s.uiPrefs.controlStoreHideEmpty);
-  const setBitView = useAppStore((s) => s.setControlStoreBitView);
-  const setHideEmpty = useAppStore((s) => s.setControlStoreHideEmpty);
 
   const listRef = useRef<FixedSizeList<RowData>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -233,26 +231,6 @@ export function ControlStoreView(): JSX.Element {
 
   return (
     <div className="panel">
-      <div className={styles.toolbar}>
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={bitView}
-            onChange={(e) => setBitView(e.target.checked)}
-          />
-          Bit view
-        </label>
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={hideEmpty}
-            onChange={(e) => setHideEmpty(e.target.checked)}
-          />
-          Hide empty rows
-        </label>
-        <span className={styles.toolbarSpacer} />
-        <span className={`mono ${styles.toolbarStat}`}>{items.length} rows</span>
-      </div>
       {!bitView && (
         // The bit view embeds its own labels (vertically) into every row,
         // so the column-header strip is only useful in textual mode.

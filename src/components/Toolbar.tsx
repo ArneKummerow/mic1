@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Pause,
   Play,
@@ -9,31 +8,11 @@ import {
   FastForward,
   AlertTriangle,
   Square,
-  Share2,
-  FileText,
-  LayoutGrid,
-  Upload,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
-import { IJVM_SAMPLES } from '../engine/ijvm';
-import { DEFAULT_MICROCODE } from '../engine/defaultMicrocode';
-import { resetLayout } from './layoutApi';
 import { ViewMenu } from './ViewMenu';
-import { importTextFile, exportTextFile } from '../utils/fileIO';
+import { FileMenu } from './FileMenu';
 import styles from './Toolbar.module.css';
-
-const MAL_SPEC = {
-  extension: '.mal',
-  description: 'MAL microcode',
-  mime: 'text/plain',
-} as const;
-const IJVM_SPEC = {
-  extension: '.ijvm',
-  description: 'IJVM macrocode',
-  mime: 'text/plain',
-} as const;
 
 const SPEED_PRESETS = [1, 2, 4, 10, 50, 200, 1000, 10000];
 
@@ -53,87 +32,6 @@ export function Toolbar(): JSX.Element {
   const pause = useAppStore((s) => s.pause);
   const reset = useAppStore((s) => s.reset);
   const setSpeed = useAppStore((s) => s.setSpeed);
-  const resetToDefaults = useAppStore((s) => s.resetToDefaults);
-  const copyShareUrl = useAppStore((s) => s.copyShareUrl);
-  const theme = useAppStore((s) => s.uiPrefs.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
-
-  const [shareFlash, setShareFlash] = useState(false);
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-
-  const handleShare = async (): Promise<void> => {
-    await copyShareUrl();
-    setShareFlash(true);
-    setTimeout(() => setShareFlash(false), 1500);
-  };
-
-  const handleResetDefaults = (): void => {
-    if (confirm('Replace the current microcode and macrocode with the bundled defaults? Your changes will be lost.')) {
-      resetToDefaults();
-    }
-  };
-
-  const handleResetLayout = (): void => {
-    resetLayout();
-  };
-
-  const handleImport = async (): Promise<void> => {
-    const result = await importTextFile([MAL_SPEC, IJVM_SPEC]);
-    if (!result) return;
-    const lower = result.name.toLowerCase();
-    const isMal = lower.endsWith('.mal');
-    const isIjvm = lower.endsWith('.ijvm');
-    if (!isMal && !isIjvm) {
-      alert(`Unrecognised extension: ${result.name}\n\nExpected .mal or .ijvm.`);
-      return;
-    }
-    const target = isMal ? 'microcode (MAL)' : 'macrocode (IJVM)';
-    if (!confirm(`Replace the current ${target} with the contents of "${result.name}"?`)) return;
-    if (isMal) useAppStore.setState({ microcode: result.text });
-    else useAppStore.setState({ macrocode: result.text });
-    useAppStore.getState().reset();
-  };
-
-  const handleExport = async (e: React.ChangeEvent<HTMLSelectElement>): Promise<void> => {
-    const choice = e.target.value;
-    e.target.value = '';
-    if (choice === 'mal') {
-      await exportTextFile('microcode.mal', useAppStore.getState().microcode, MAL_SPEC);
-    } else if (choice === 'ijvm') {
-      await exportTextFile('program.ijvm', useAppStore.getState().macrocode, IJVM_SPEC);
-    }
-  };
-
-  const handleSampleChoice = (e: React.ChangeEvent<HTMLSelectElement>): void => {
-    const id = e.target.value;
-    e.target.value = ''; // reset so the same sample can be re-selected later
-    if (!id) return;
-    const sample = IJVM_SAMPLES.find((s) => s.id === id);
-    if (!sample) return;
-    const currentMicrocode = useAppStore.getState().microcode;
-    const microcodeIsCustom = currentMicrocode !== DEFAULT_MICROCODE;
-    const microcodeNote = microcodeIsCustom
-      ? '\n\nYour MAL microcode will also be reset to the bundled default ' +
-        '(samples are designed to run against it — using stale or stripped-down ' +
-        'microcode causes runtime errors when a sample dispatches to an opcode the ' +
-        'microcode does not implement).'
-      : '';
-    if (
-      confirm(
-        `Load the "${sample.label}" sample?\n\n${sample.description}${microcodeNote}\n\nYour current IJVM source will be replaced.`,
-      )
-    ) {
-      // Atomically swap both source slices, then reset immediately so the
-      // user sees the sample running without waiting for the source-change
-      // debounce. The debounce subscription will fire a second (idempotent)
-      // reset 400ms later; that's harmless.
-      useAppStore.setState({
-        microcode: DEFAULT_MICROCODE,
-        macrocode: sample.source,
-      });
-      useAppStore.getState().reset();
-    }
-  };
 
   const isRunning = mode === 'running';
   const isHalted = mode === 'halted' || machineHalted;
@@ -165,7 +63,7 @@ export function Toolbar(): JSX.Element {
           aria-label="Step IJVM back"
         >
           <Rewind size={14} />
-          <span>◀ IJVM</span>
+          <span>IJVM</span>
         </button>
         <button
           onClick={stepBack}
@@ -174,7 +72,7 @@ export function Toolbar(): JSX.Element {
           aria-label="Microstep back"
         >
           <StepBack size={14} />
-          <span>◀ µ</span>
+          <span>µ</span>
         </button>
         <button onClick={microstep} disabled={!canStep} title="Microstep (F11)">
           <StepForward size={14} />
@@ -207,59 +105,8 @@ export function Toolbar(): JSX.Element {
       </div>
 
       <div className={styles.right}>
-        <button onClick={handleShare} title="Copy a shareable link to the clipboard">
-          <Share2 size={14} />
-          <span>{shareFlash ? 'Copied!' : 'Share'}</span>
-        </button>
-        <button onClick={handleImport} title="Import a .mal or .ijvm file from disk">
-          <Upload size={14} />
-          <span>Import</span>
-        </button>
-        <select
-          className={styles.sampleSelect}
-          onChange={handleExport}
-          defaultValue=""
-          title="Export the current microcode or macrocode to a file"
-          aria-label="Export source"
-        >
-          <option value="" disabled>
-            Export…
-          </option>
-          <option value="mal">Microcode (.mal)</option>
-          <option value="ijvm">Macrocode (.ijvm)</option>
-        </select>
-        <select
-          className={styles.sampleSelect}
-          onChange={handleSampleChoice}
-          defaultValue=""
-          title="Load a bundled IJVM sample into the macrocode editor"
-          aria-label="Load IJVM sample"
-        >
-          <option value="" disabled>
-            Sample…
-          </option>
-          {IJVM_SAMPLES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <button onClick={handleResetDefaults} title="Restore the bundled default microcode and macrocode">
-          <FileText size={14} />
-          <span>Defaults</span>
-        </button>
-        <button
-          onClick={toggleTheme}
-          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-        >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-        <ViewMenu open={viewMenuOpen} setOpen={setViewMenuOpen} />
-        <button onClick={handleResetLayout} title="Restore the default panel arrangement">
-          <LayoutGrid size={14} />
-          <span>Layout</span>
-        </button>
+        <FileMenu />
+        <ViewMenu />
         <StatusPill mode={mode} hasErrors={hasErrors} errorCount={errorCount} mpc={lastTrace?.mpcAfter ?? 0} />
       </div>
     </div>
