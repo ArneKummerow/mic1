@@ -27,12 +27,21 @@
 }
 
 /*
- * Hide tab bars across all dock groups. The user opted in via the View menu;
- * tab switching becomes impossible while hidden, but that's the documented
- * trade-off (and the user can flip it back at any time). We zero out the
- * tab container's height/visibility but keep the layout intact.
+ * Tab-bar visibility policies (see ViewMenu's "Tab bars" group):
+ *   - tabs-all   — show every group's tab bar (default Dockview behaviour).
+ *   - tabs-multi — only groups with multiple tabs show their bar; single-tab
+ *                  groups have the `.mic1-group--hide-tabs` class added by
+ *                  Layout.tsx whenever the dock layout changes.
+ *   - tabs-none  — every group's tab bar is hidden.
+ *
+ * Hiding the bar suppresses tab switching for that group, but the user can
+ * flip the policy back at any time via the View menu.
  */
-.mic1-dock--hide-tabs .dv-tabs-and-actions-container {
+.mic1-dock--tabs-none .dv-tabs-and-actions-container {
+  display: none !important;
+}
+
+.mic1-dock--tabs-multi .mic1-group--hide-tabs .dv-tabs-and-actions-container {
   display: none !important;
 }
 

@@ -140,6 +140,33 @@ export function MenuCheckbox({
   );
 }
 
+/** Radio row — for mutually-exclusive option groups in the menu. */
+export function MenuRadio<T extends string>({
+  name,
+  value,
+  current,
+  onChange,
+  children,
+}: {
+  name: string;
+  value: T;
+  current: T;
+  onChange: (v: T) => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <label className={styles.row}>
+      <input
+        type="radio"
+        name={name}
+        checked={value === current}
+        onChange={() => onChange(value)}
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
 export function MenuSeparator(): JSX.Element {
   return <div className={styles.separator} role="separator" />;
 }

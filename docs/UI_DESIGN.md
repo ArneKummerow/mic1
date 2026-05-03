@@ -2,14 +2,14 @@
 
 ## Design principles
 
-1. **Everything visible at once.** The whole point is to correlate microcode with what the data path does and what registers change. Hiding any of those behind tabs defeats the purpose. The default layout shows code, data path, registers, memory, and console simultaneously.
+1. **Everything visible at once.** The whole point is to correlate microcode with what the data path does and what registers change. Hiding any of those behind tabs defeats the purpose. The default layout shows code, data path, the microinstruction inspector, the operand stack, and console simultaneously; memory, registers, and the control store are reachable as tabs in shared groups.
 2. **One source of truth on screen.** The currently executing microinstruction is highlighted in *both* the editor and the control-store view. The currently executing IJVM instruction is highlighted in *both* the macrocode editor and the memory view.
 3. **Animations are pedagogical, not decorative.** A microcycle's animation lasts long enough (200–400 ms at default speed) to be read, and shorter at faster speeds; it is suppressed entirely in "turbo" mode.
 4. **Dark theme by default.** Saturated colors on a dark background make active bus segments and changed registers pop. A light theme is provided but secondary.
 
 ## Top-level layout
 
-The toolbar is a fixed strip at the top. Below it sits a **dockable panel area** (powered by [Dockview](https://dockview.dev/)) that hosts every other surface — microcode editor, macrocode editor, data path, memory view, registers, control store, console.
+The toolbar is a fixed strip at the top. Below it sits a **dockable panel area** (powered by [Dockview](https://dockview.dev/)) that hosts every other surface — microcode editor, macrocode editor, data path, memory view, registers, control store, console, operand stack, and the µinstruction inspector.
 
 Each surface is a **panel** rendered as a tab inside a **tab group**. Users can:
 
@@ -19,40 +19,42 @@ Each surface is a **panel** rendered as a tab inside a **tab group**. Users can:
 
 Constraints:
 
-- Panels **cannot be closed**. Every one of the seven surfaces is always present somewhere in the layout. The custom tab component therefore has no `×` close button — only a title and a drag handle. This is intentional pedagogy: students can rearrange to suit their screen, but they can't accidentally lose a panel.
+- Tabs have **no close button** in the bar itself — only a title and a drag handle. Visibility is instead managed centrally via **View ▸ Panels** (each panel has a checkbox); hiding a panel removes its tab from the dock, re-checking it adds the panel back at the end. This is intentional pedagogy: students can rearrange to suit their screen, but they can't accidentally lose a panel through a stray click on a tab close-button.
+- **Tab bars themselves** can be hidden via **View ▸ Tab bars**, which has a three-state policy: show all, hide bars on single-tab groups (the default — saves vertical space when there's nothing to switch), or hide every tab bar.
 - The toolbar is **not** part of the dockable area; it always lives at the top.
 - Layout state (which tabs in which groups, in what order, with what sizes) is persisted to localStorage and restored on reload.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Toolbar  [▶ Run] [⏭ µStep] [⏩ IJVM] [⟲ Reset]  speed [───●──]   [Share] [Defaults]  ◉ Halted │
-├──────────────────────────┬──────────────────────────┬───────────────────────┤
-│ ┌── Microcode (MAL) ──┐  │ ┌── Data Path ─────────┐ │ ┌── Registers │ Ctrl Store ── ┐│
-│ │                      │  │ │                       │ │ │                              ││
-│ │  (Monaco)            │  │ │  (SVG)                │ │ │  (registers active)          ││
-│ │                      │  │ │                       │ │ │                              ││
-│ └──────────────────────┘  │ └───────────────────────┘ │ └──────────────────────────────┘│
-├──────────────────────────┼──────────────────────────┼───────────────────────┤
-│ ┌── Macrocode (IJVM) ─┐  │ ┌── Memory ────────────┐ │ ┌── Console ────────────────────┐│
-│ │                      │  │ │                       │ │ │                              ││
-│ └──────────────────────┘  │ └───────────────────────┘ │ └──────────────────────────────┘│
-└──────────────────────────┴──────────────────────────┴───────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ Toolbar  [▶ Run] [⏭ µStep] [⏩ IJVM] [⟲ Reset]  speed [───●──]  [File] [View] ◉ Halted │
+├───────────┬────────────────────────────────┬─────────────────────────────────────┤
+│           │  Macrocode (active)            │                                     │
+│ Data Path │  Control Store                 │                                     │
+│           │  Memory       (tabbed)         │  Microcode (MAL)                    │
+│           │                                │                                     │
+│           ├──────────────────┬─────────────┤                                     │
+├───────────┤                  │             │                                     │
+│ µInst.    │  Console         │  Stack      │                                     │
+│ Inspector │                  │             │                                     │
+└───────────┴──────────────────┴─────────────┴─────────────────────────────────────┘
 ```
 
-Default layout (used on first load and after **Reset Layout**):
+Default layout (used on first load and after **View ▸ Reset layout**):
 
-| Cell    | Group contains              |
-|---------|-----------------------------|
-| top-L   | Microcode editor            |
-| top-C   | Data Path                   |
-| top-R   | Registers + Control Store (two tabs in one group; Registers is the active tab) |
-| bot-L   | Macrocode editor            |
-| bot-C   | Memory                      |
-| bot-R   | Console                     |
+| Area                                 | Group contains                                                              |
+|--------------------------------------|-----------------------------------------------------------------------------|
+| Column A, top (≈85% of A's height)   | Data Path                                                                   |
+| Column A, bottom (≈15%)              | µInstruction Inspector                                                      |
+| Column B, top (≈60% of B's height)   | Macrocode (IJVM, active) + Control Store + Memory (three tabs in one group) |
+| Column B, bottom-left (≈75% wide)    | Console                                                                     |
+| Column B, bottom-right (≈25% wide)   | Stack                                                                       |
+| Column C                             | Microcode (MAL)                                                             |
+
+The **Registers** panel is intentionally hidden by default — the textbook MIC-1 register set is already drawn directly on the Data Path SVG, so a separate table is redundant in the default arrangement. Users can re-enable it via **View ▸ Panels ▸ Registers**.
 
 Resizable splitters between every pair of adjacent groups; sizes persist.
 
-A **Reset Layout** affordance lives in the toolbar's settings menu (or as a keyboard shortcut) so users who get lost in a custom arrangement can recover the default with one click.
+A **Reset layout** affordance lives in the **View** menu (or as a keyboard shortcut) so users who get lost in a custom arrangement can recover the default with one click.
 
 On narrow screens (<1024 px) Dockview gracefully falls back to a vertical scroll of stacked groups; users can also drag everything into a single group of stacked tabs if they want a maximum-area "focus mode" for any one panel.
 
@@ -61,12 +63,13 @@ On narrow screens (<1024 px) Dockview gracefully falls back to a vertical scroll
 Compact, single-line. Left-aligned execution controls; right-aligned utilities.
 
 - **Run / Pause** — single toggle button (icon swaps).
-- **µStep** — execute one microinstruction.
-- **Step IJVM** — run until next IJVM fetch (i.e. one full macroinstruction).
+- **µStep / Step back** — advance or rewind one microinstruction.
+- **Step IJVM / Step IJVM back** — run forward (or rewind) one full macroinstruction.
 - **Reset** — restart with current code; confirmation only if running.
 - **Speed slider** — logarithmic, 1 µs/s to 100 000 µs/s. Marker at "turbo" threshold (~200/s) where animations switch off.
-- **Settings** — memory size, theme, animation toggle, "show internal labels" toggle.
-- **Help / About** — opens a modal with key bindings and a short MIC-1 primer.
+- **File menu** — load samples, share via URL, restore defaults.
+- **View menu** — theme, reset layout, tab-bar visibility (3-state), editor toggles (word wrap, follow execution), control-store toggles, per-panel visibility.
+- **Docs** — opens an in-app guided tour.
 - **Status pill** — shows `Halted`, `Running`, `Paused at MPC=0x023`, or assembler error count.
 
 Keyboard:
@@ -187,13 +190,9 @@ Two stacked sub-panels:
 
 ## Onboarding
 
-On first load:
+On first load the default microprogram is paired with the **Recursive sum** sample (the first entry in `IJVM_SAMPLES`), which exercises `INVOKEVIRTUAL` / `IRETURN` and lands a TOS of 55 after halting. The **File ▸ Load sample** menu lists the bundled programs sorted basic → advanced (NOP/HALT, Hello, Arithmetic, Stack ops, Max-of-two, LDC_W constant pool, Sum loop, Recursive sum, Echo, WIDE prefix), so a new user can ramp from "do nothing and halt" up to the recursive call sample in one menu.
 
-1. Default microprogram and a small sample IJVM program (`OUT "Hello"` + a loop) are pre-loaded.
-2. A non-blocking tooltip on the toolbar points to the µStep button.
-3. The first time the user steps, a one-line caption appears under the data-path view explaining what the highlighted bus segments mean. Dismissible, doesn't return.
-
-No tutorial overlay, no modal walkthrough — the textbook is the tutorial; this app is the lab.
+No tutorial overlay, no modal walkthrough — the **Docs** button opens the in-app guided tour instead, and the textbook (`docs/MIC1_REFERENCE.md`) is the deeper reference.
 
 ## Responsive / accessibility
 

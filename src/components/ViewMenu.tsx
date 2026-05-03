@@ -6,21 +6,27 @@ import {
   Dropdown,
   MenuItem,
   MenuCheckbox,
+  MenuRadio,
   MenuSeparator,
   MenuGroupLabel,
 } from './Dropdown';
 
 /**
  * Toolbar dropdown for view-related preferences: theme, layout reset, tab
- * bar visibility, and which panels are visible.
+ * bar visibility, editor toggles (word-wrap, follow-execution), and which
+ * panels are visible.
  */
 export function ViewMenu(): JSX.Element {
   const theme = useAppStore((s) => s.uiPrefs.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const hiddenPanels = useAppStore((s) => s.uiPrefs.hiddenPanels);
-  const hideTabBars = useAppStore((s) => s.uiPrefs.hideTabBars);
+  const tabBarVisibility = useAppStore((s) => s.uiPrefs.tabBarVisibility);
+  const editorWordWrap = useAppStore((s) => s.uiPrefs.editorWordWrap);
+  const editorCodeJump = useAppStore((s) => s.uiPrefs.editorCodeJump);
   const setHiddenPanels = useAppStore((s) => s.setHiddenPanels);
-  const setHideTabBars = useAppStore((s) => s.setHideTabBars);
+  const setTabBarVisibility = useAppStore((s) => s.setTabBarVisibility);
+  const setEditorWordWrap = useAppStore((s) => s.setEditorWordWrap);
+  const setEditorCodeJump = useAppStore((s) => s.setEditorCodeJump);
   const controlStoreBitView = useAppStore((s) => s.uiPrefs.controlStoreBitView);
   const controlStoreHideEmpty = useAppStore((s) => s.uiPrefs.controlStoreHideEmpty);
   const setControlStoreBitView = useAppStore((s) => s.setControlStoreBitView);
@@ -56,8 +62,38 @@ export function ViewMenu(): JSX.Element {
             <span>Reset layout</span>
           </MenuItem>
           <MenuSeparator />
-          <MenuCheckbox checked={hideTabBars} onChange={setHideTabBars}>
-            Hide tab bars
+          <MenuGroupLabel>Tab bars</MenuGroupLabel>
+          <MenuRadio
+            name="tabbars"
+            value="all"
+            current={tabBarVisibility}
+            onChange={setTabBarVisibility}
+          >
+            Show all tab bars
+          </MenuRadio>
+          <MenuRadio
+            name="tabbars"
+            value="multi"
+            current={tabBarVisibility}
+            onChange={setTabBarVisibility}
+          >
+            Hide single-tab bars
+          </MenuRadio>
+          <MenuRadio
+            name="tabbars"
+            value="none"
+            current={tabBarVisibility}
+            onChange={setTabBarVisibility}
+          >
+            Hide all tab bars
+          </MenuRadio>
+          <MenuSeparator />
+          <MenuGroupLabel>Editors</MenuGroupLabel>
+          <MenuCheckbox checked={editorWordWrap} onChange={setEditorWordWrap}>
+            Word wrap
+          </MenuCheckbox>
+          <MenuCheckbox checked={editorCodeJump} onChange={setEditorCodeJump}>
+            Follow execution
           </MenuCheckbox>
           <MenuSeparator />
           <MenuGroupLabel>Control Store</MenuGroupLabel>

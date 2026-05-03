@@ -112,10 +112,22 @@ export interface AppState {
   setTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
   setHiddenPanels: (ids: ReadonlySet<string>) => void;
-  setHideTabBars: (v: boolean) => void;
+  setTabBarVisibility: (v: TabBarVisibility) => void;
+  setEditorWordWrap: (v: boolean) => void;
+  setEditorCodeJump: (v: boolean) => void;
 }
 
 export type ThemeName = 'dark' | 'light';
+
+/**
+ * Three-state policy for dock tab-bar visibility:
+ *   - 'all'    — always show every group's tab bar.
+ *   - 'multi'  — show only the tab bars of groups holding more than one
+ *                tab (single-tab groups suppress the bar to save vertical
+ *                space when there's nothing to switch between).
+ *   - 'none'   — hide every tab bar (the View menu can flip it back).
+ */
+export type TabBarVisibility = 'all' | 'multi' | 'none';
 
 export interface UiPrefs {
   /** Render the Control Store rows in 36-bit-word-decomposed layout. */
@@ -128,16 +140,26 @@ export interface UiPrefs {
    *  JSON-serialisable. The Layout component re-syncs the dock from this
    *  list. */
   hiddenPanels: string[];
-  /** When true, hide tab bars across all dock groups. */
-  hideTabBars: boolean;
+  /** Tab-bar visibility policy across the dock. */
+  tabBarVisibility: TabBarVisibility;
+  /** Soft-wrap long lines in the Monaco code editors. */
+  editorWordWrap: boolean;
+  /** When stepping/running, scroll the code editors to keep the current
+   *  execution line in view. Disable to avoid jumpiness while reading. */
+  editorCodeJump: boolean;
 }
 
 const DEFAULT_UI_PREFS: UiPrefs = {
   controlStoreBitView: false,
-  controlStoreHideEmpty: false,
+  controlStoreHideEmpty: true,
   theme: 'dark',
-  hiddenPanels: [],
-  hideTabBars: false,
+  // Registers is hidden by default — the textbook MIC-1 register set is
+  // already drawn directly on the Data Path SVG, so the dedicated panel is
+  // redundant in the default layout. Users can re-enable it via View ▸ Panels.
+  hiddenPanels: ['registers'],
+  tabBarVisibility: 'multi',
+  editorWordWrap: false,
+  editorCodeJump: true,
 };
 
 let runIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -435,8 +457,14 @@ export const useAppStore = create<AppState>()(
         setHiddenPanels: (ids) => {
           set({ uiPrefs: { ...get().uiPrefs, hiddenPanels: [...ids].sort() } });
         },
-        setHideTabBars: (v) => {
-          set({ uiPrefs: { ...get().uiPrefs, hideTabBars: v } });
+        setTabBarVisibility: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, tabBarVisibility: v } });
+        },
+        setEditorWordWrap: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, editorWordWrap: v } });
+        },
+        setEditorCodeJump: (v) => {
+          set({ uiPrefs: { ...get().uiPrefs, editorCodeJump: v } });
         },
       }),
       {
@@ -455,7 +483,15 @@ export const useAppStore = create<AppState>()(
           // Merge persisted prefs with defaults so newly-added fields (e.g.
           // a theme key added in a later release) get sensible values
           // without nuking the user's existing prefs.
-          state.uiPrefs = { ...DEFAULT_UI_PREFS, ...state.uiPrefs };
+          const persistedPrefs = state.uiPrefs as Partial<UiPrefs> & { hideTabBars?: boolean };
+          // Migration: the older boolean `hideTabBars` was replaced by the
+          // three-state `tabBarVisibility`. Map true → 'none', false → 'multi'
+          // (the new default) so existing users keep their intent.
+          if (persistedPrefs.hideTabBars !== undefined && persistedPrefs.tabBarVisibility === undefined) {
+            persistedPrefs.tabBarVisibility = persistedPrefs.hideTabBars ? 'none' : 'multi';
+          }
+          delete persistedPrefs.hideTabBars;
+          state.uiPrefs = { ...DEFAULT_UI_PREFS, ...persistedPrefs };
           const fresh = bootstrap(state.microcode, state.macrocode);
           state.machine = fresh.machine;
           state.microAssembly = fresh.microAssembly;

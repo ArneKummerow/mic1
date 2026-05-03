@@ -8,6 +8,148 @@
  */
 
 /**
+ * NOP / HALT — the smallest possible program. Useful as a sanity check
+ * (does the simulator boot and reach HALT cleanly?) and as a starting
+ * point for new programs.
+ */
+export const SAMPLE_NOP_HALT = `// Smallest possible program — execute a single NOP, then HALT.
+//
+// A useful first step when learning the toolchain: the simulator boots,
+// dispatches Main1 (MPC = 0), executes NOP (one trivial microcycle),
+// returns to Main1, dispatches HALT, and stops. Watch the µInst.
+// Inspector and Data Path panels follow each cycle.
+
+        NOP
+        HALT
+`.trimStart();
+
+/**
+ * "HELLO\\n" via OUT — the classic first I/O program. Each character is
+ * pushed via BIPUSH and emitted to the Console with OUT.
+ */
+export const SAMPLE_HELLO = `// Print "HELLO" + newline by pushing each ASCII byte and OUT-ing it.
+//
+// IJVM has no string literals; the assembler emits BIPUSH values directly.
+// Watch the Console panel — each OUT appends one character. The trailing
+// 0x0A is a line feed.
+
+        BIPUSH 72         // 'H'
+        OUT
+        BIPUSH 69         // 'E'
+        OUT
+        BIPUSH 76         // 'L'
+        OUT
+        BIPUSH 76         // 'L'
+        OUT
+        BIPUSH 79         // 'O'
+        OUT
+        BIPUSH 10         // '\\n'
+        OUT
+        HALT
+`.trimStart();
+
+/**
+ * Arithmetic mini-tour — exercises IADD, ISUB, IAND, IOR using small
+ * constants. The final TOS is the boolean-OR mix of two computed values.
+ */
+export const SAMPLE_ARITHMETIC = `// Arithmetic & bitwise mini-tour: IADD, ISUB, IAND, IOR.
+//
+// Computes (7 + 5) - 3 = 9 (binary 1001), then ORs in 0b0110 = 6
+// to leave 0b1111 = 15 on top of the stack, then ANDs against 0b1010 = 10
+// to leave 0b1010 = 10. After HALT the Stack panel shows TOS = 10.
+
+        BIPUSH 7
+        BIPUSH 5
+        IADD              // 12
+        BIPUSH 3
+        ISUB              // 9
+        BIPUSH 6
+        IOR               // 15
+        BIPUSH 10
+        IAND              // 10
+        HALT
+`.trimStart();
+
+/**
+ * Stack manipulation — DUP, SWAP, POP. Useful for visualising how the
+ * top-of-stack cache (TOS register) and SP move during pure stack work.
+ */
+export const SAMPLE_STACK_OPS = `// Stack manipulation: DUP, SWAP, POP.
+//
+// Walks the operand stack through:
+//   push 1, 2          → [1, 2]
+//   DUP                → [1, 2, 2]
+//   SWAP               → [1, 2, 2]   (swap top two — already 2,2)
+//   POP                → [1, 2]
+//   SWAP               → [2, 1]
+//
+// Open the Stack panel and step through with Step ▸ µstep / IJVM step.
+// Watch how TOS (the top-of-stack cache) updates without a memory write.
+
+        BIPUSH 1
+        BIPUSH 2
+        DUP
+        SWAP
+        POP
+        SWAP
+        HALT
+`.trimStart();
+
+/**
+ * Branching — find the larger of two values using IFLT and IF_ICMPEQ.
+ * A natural follow-on to the looped sum: still no method calls, but two
+ * different conditional branches to dispatch.
+ */
+export const SAMPLE_MAX_OF_TWO = `// Find the maximum of two values using IFLT.
+//
+// LV[1] = a, LV[2] = b. After the branch, the larger value is left on
+// top of the stack. Try changing the BIPUSH constants and re-running.
+
+        BIPUSH 17
+        ISTORE 1          // a = 17
+        BIPUSH 42
+        ISTORE 2          // b = 42
+
+        // (a - b) < 0  ⇒  a < b  ⇒  return b; otherwise return a.
+        ILOAD 1
+        ILOAD 2
+        ISUB
+        IFLT bIsBigger
+
+        ILOAD 1
+        GOTO done
+
+bIsBigger:
+        ILOAD 2
+
+done:
+        HALT
+`.trimStart();
+
+/**
+ * LDC_W + constant pool — pushes a 32-bit value the BIPUSH range cannot
+ * reach (BIPUSH is signed 8-bit). Demonstrates the \`.constant\` directive
+ * and the assembler's constant-pool machinery.
+ */
+export const SAMPLE_LDC = `// LDC_W: load a 32-bit constant from the constant pool.
+//
+// BIPUSH is limited to signed 8-bit values, so anything outside [-128, 127]
+// must come from the constant pool. \`.constant N value\` declares a pool
+// entry; \`LDC_W N\` emits a 3-byte instruction whose 16-bit operand is the
+// pool index.
+//
+// The two pool loads here add to 0x12345678 + 0x0000ABCD = 0x1234C145.
+
+.constant BIG     0x12345678
+.constant SMALL   0x0000ABCD
+
+        LDC_W BIG
+        LDC_W SMALL
+        IADD
+        HALT
+`.trimStart();
+
+/**
  * Iterative sum 1..N — counted loop over local variables.
  * Exercises BIPUSH, ISTORE, ILOAD, IFEQ, IADD, IINC, GOTO, HALT.
  */
@@ -142,23 +284,60 @@ export interface IjvmSample {
 }
 
 /**
- * Curated registry of bundled samples. Used by the Toolbar's sample
- * picker; the first entry is the default (loaded fresh into the editor on
- * first launch and via the "Defaults" button).
+ * Curated registry of bundled samples — sorted basic → advanced. Used by
+ * the File menu's sample picker; the first entry is the default loaded
+ * fresh into the editor on first launch and via the "Defaults" button.
  */
 export const IJVM_SAMPLES: readonly IjvmSample[] = [
   {
-    id: 'recursive-sum',
-    label: 'Recursive sum',
-    source: SAMPLE_RECURSIVE_SUM,
+    id: 'nop-halt',
+    label: 'NOP / HALT',
+    source: SAMPLE_NOP_HALT,
     description:
-      'Recursive sum 1..N via INVOKEVIRTUAL / IRETURN. Demonstrates the textbook calling convention.',
+      'The smallest possible program — one NOP and HALT. Useful as a starting point or sanity check.',
+  },
+  {
+    id: 'hello',
+    label: 'Hello',
+    source: SAMPLE_HELLO,
+    description: 'Print "HELLO" via BIPUSH + OUT — first taste of console output.',
+  },
+  {
+    id: 'arithmetic',
+    label: 'Arithmetic',
+    source: SAMPLE_ARITHMETIC,
+    description: 'IADD / ISUB / IAND / IOR mini-tour over small BIPUSH constants.',
+  },
+  {
+    id: 'stack-ops',
+    label: 'Stack ops',
+    source: SAMPLE_STACK_OPS,
+    description: 'DUP, SWAP and POP — pure stack manipulation, no arithmetic.',
+  },
+  {
+    id: 'max-of-two',
+    label: 'Max of two',
+    source: SAMPLE_MAX_OF_TWO,
+    description: 'Find the larger of two values using IFLT — first conditional branch.',
+  },
+  {
+    id: 'ldc',
+    label: 'LDC_W constant pool',
+    source: SAMPLE_LDC,
+    description: 'Load 32-bit constants from the pool with LDC_W when BIPUSH cannot reach.',
   },
   {
     id: 'sum-loop',
     label: 'Sum loop',
     source: SAMPLE_SUM_LOOP,
     description: 'Iterative sum 1..N — counted loop over local variables.',
+  },
+  {
+    id: 'recursive-sum',
+    label: 'Recursive sum',
+    source: SAMPLE_RECURSIVE_SUM,
+    description:
+      'Recursive sum 1..N via INVOKEVIRTUAL / IRETURN. Demonstrates the textbook calling convention.',
   },
   {
     id: 'echo',

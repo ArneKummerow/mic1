@@ -6,6 +6,12 @@ import { DEFAULT_MICROCODE } from './defaultMicrocode';
 import { DEFAULT_MACROCODE } from './defaultMacrocode';
 import {
   IJVM_SAMPLES,
+  SAMPLE_NOP_HALT,
+  SAMPLE_HELLO,
+  SAMPLE_ARITHMETIC,
+  SAMPLE_STACK_OPS,
+  SAMPLE_MAX_OF_TWO,
+  SAMPLE_LDC,
   SAMPLE_RECURSIVE_SUM,
   SAMPLE_SUM_LOOP,
   SAMPLE_ECHO,
@@ -789,5 +795,59 @@ describe('integration: bundled samples', () => {
     const { halted } = runToHalt(state, 10000);
     expect(halted).toBe(true);
     expect(state.TOS).toBe(205);
+  });
+
+  it('SAMPLE_NOP_HALT halts cleanly', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_NOP_HALT);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 200);
+    expect(halted).toBe(true);
+  });
+
+  it('SAMPLE_HELLO emits "HELLO\\n" via OUT', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_HELLO);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 2000);
+    expect(halted).toBe(true);
+    expect(String.fromCharCode(...state.consoleOutputBuffer)).toBe('HELLO\n');
+  });
+
+  it('SAMPLE_ARITHMETIC leaves 10 on TOS', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_ARITHMETIC);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 2000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(10);
+  });
+
+  it('SAMPLE_STACK_OPS leaves 1 on TOS', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_STACK_OPS);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 1000);
+    expect(halted).toBe(true);
+    // After: BIPUSH 1, BIPUSH 2, DUP, SWAP, POP, SWAP → stack [2, 1] (TOS = 1).
+    expect(state.TOS).toBe(1);
+  });
+
+  it('SAMPLE_MAX_OF_TWO picks the larger of 17 and 42', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_MAX_OF_TWO);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 2000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(42);
+  });
+
+  it('SAMPLE_LDC adds two pool constants', () => {
+    const micro = assembleMicrocode(DEFAULT_MICROCODE);
+    const ijvm = assembleIJVM(SAMPLE_LDC);
+    const state = bootstrap(micro.controlStore, ijvm.bytes, ijvm.constants);
+    const { halted } = runToHalt(state, 1000);
+    expect(halted).toBe(true);
+    expect(state.TOS).toBe(0x12345678 + 0x0000abcd);
   });
 });

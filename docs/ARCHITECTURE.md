@@ -7,9 +7,10 @@ The application is a **single-page, client-side React app**. There is no server,
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  UI Layer (React components)                                 │
-│  ─ DataPathView  ─ RegisterPanel  ─ MemoryView               │
+│  ─ DataPathView  ─ RegisterPanel  ─ MemoryView  ─ StackView  │
 │  ─ MicrocodeEditor  ─ MacrocodeEditor  ─ ControlStoreView    │
-│  ─ Console  ─ Toolbar  ─ ExecutionControls                   │
+│  ─ MicroInspector  ─ Console  ─ Toolbar (File / View menus)  │
+│  ─ Docs  ─ Layout (DockviewReact)                            │
 └────────────────┬─────────────────────────────────────────────┘
                  │ reads state, dispatches actions
 ┌────────────────┴─────────────────────────────────────────────┐
@@ -171,8 +172,9 @@ The SVG is hand-authored as a React component (`<DataPathView>`) with named elem
 
 ## Persistence
 
-- Source code (`microcode`, `macrocode`) is autosaved to `localStorage` on a 500 ms debounce.
-- "Reset to defaults" reloads the textbook microprogram and a sample IJVM program (e.g. a small loop / fibonacci).
+- Source code (`microcode`, `macrocode`) is autosaved to `localStorage` on a debounce (currently 400 ms — see `REASSEMBLE_DEBOUNCE_MS`).
+- "Reset to defaults" reloads the textbook microprogram and the **Recursive sum** sample (the first entry of `IJVM_SAMPLES` in `src/engine/ijvm/samples.ts`).
+- UI preferences (theme, tab-bar visibility, editor word-wrap, follow-execution, control-store toggles, hidden-panel list) are persisted alongside the source under the same store key.
 - Optional: import/export as `.mal` and `.ijvm` files via the File System Access API where available, falling back to download/upload.
 
 ## Module layout
@@ -180,50 +182,55 @@ The SVG is hand-authored as a React component (`<DataPathView>`) with named elem
 ```
 src/
   engine/
-    types.ts              MachineState, Microinstruction, Trace
-    simulator.ts          step()
-    mal/
-      lexer.ts
-      parser.ts
-      assembler.ts
-    ijvm/
-      lexer.ts
-      parser.ts
-      assembler.ts
-      opcodes.ts
-    defaultMicrocode.ts   the textbook microprogram as a string
-    defaultMacrocode.ts   sample IJVM program
+    types.ts                  MachineState, Microinstruction, Trace
+    simulator.ts              step(), snapshotMachineState()
+    mal/                      MAL (microcode) assembler + formatter
+      assembler.ts, formatter.ts, …
+    ijvm/                     IJVM assembler + opcode table + bundled samples
+      assembler.ts, opcodes.ts, samples.ts
+    defaultMicrocode.ts       the textbook microprogram as a string
+    defaultMacrocode.ts       re-exports the default sample (Recursive sum)
   store/
-    index.ts              Zustand store
-    bootstrap.ts
-    share.ts
+    index.ts                  Zustand store + UI preferences
+    bootstrap.ts              fresh-machine factory
+    share.ts                  share-via-URL hash codec
   components/
-    Toolbar.tsx
-    Layout.tsx            DockviewReact wrapper — owns panel registration,
-                          default layout, persistence, and the closeless tab
-    DataPathView.tsx
-    RegisterPanel.tsx
-    MemoryView.tsx
-    ControlStoreView.tsx
-    MicrocodeEditor.tsx
-    MacrocodeEditor.tsx
-    Console.tsx
-  styles/
-    layout.css            theming + Dockview overrides
-  App.tsx
-  main.tsx
-  index.html
+    Toolbar.tsx               run / pause / step controls + status pill
+    FileMenu.tsx              File menu — samples, share, defaults
+    ViewMenu.tsx              View menu — theme, layout, tab bars, editor toggles, panel visibility
+    Dropdown.tsx              shared portal-rendered toolbar dropdown
+    Layout.tsx, Layout.css    DockviewReact wrapper, default layout,
+    defaultLayout.ts          tab-bar visibility application,
+    layoutApi.ts              persistence, tab-bar reconciliation
+    panels.ts                 single source of truth for dockable panels
+    DataPathView.tsx          hand-authored SVG of the MIC-1 data path
+    RegisterPanel.tsx         hex/dec/bin register table
+    MemoryView.tsx            hex view with region overlays
+    StackView.tsx             operand-stack list view
+    ControlStoreView.tsx      virtualized 512-row control-store table
+    BitView.tsx               36-bit-word visualization (used by Control Store + Inspector)
+    MicroInspector.tsx        live current-µinstruction inspector
+    MicrocodeEditor.tsx       Monaco editor for MAL
+    MacrocodeEditor.tsx       Monaco editor for IJVM
+    monacoLanguages.ts, monacoProviders.ts, monacoSetup.ts
+    Console.tsx               IN/OUT console
+    Tooltip.tsx, Tooltip.module.css   portal-rendered tooltip for dense surfaces
+    Docs.tsx                  in-app guided tour
+    useKeyboardShortcuts.ts   F5 / F10 / F11 / Ctrl+S, etc.
+  App.tsx, main.tsx, index.html, index.css
 ```
 
 ### Layout component
 
 `Layout.tsx` owns the dockable area:
 
-- Maps panel IDs (`microcode`, `macrocode`, `dataPath`, `memory`, `registers`, `controlStore`, `console`) to their rendering components.
-- On first mount: seeds the layout from localStorage if present, falling back to a hardcoded default arrangement.
+- Maps panel IDs (`microcode`, `macrocode`, `dataPath`, `memory`, `registers`, `stack`, `controlStore`, `microInspector`, `console`) to their rendering components. The canonical list lives in `panels.ts` so the View menu, the default-layout helper, and the Layout component all read from the same source.
+- On first mount: seeds the layout from localStorage if present, falling back to a hardcoded default arrangement (`defaultLayout.ts`).
 - Subscribes to Dockview's layout-change event and writes the serialised layout back to localStorage (debounced).
-- Provides a custom tab component with no close button, since panels cannot be hidden.
-- Exposes a `resetLayout()` imperative method that clears persisted layout and re-seeds from defaults — wired to the toolbar's "Reset Layout" affordance.
+- Reconciles the dock against `uiPrefs.hiddenPanels` so hiding a panel via the View menu removes its tab; re-checking it adds the panel back at the end of the dock.
+- Applies `uiPrefs.tabBarVisibility` (`'all' | 'multi' | 'none'`) by toggling classes on the dock root and on each group's container.
+- Provides a custom tab component with no close button, since per-tab close-buttons would let students lose panels by accident; visibility is mediated by the View menu instead.
+- Exposes a `resetLayout()` imperative method that clears persisted layout and re-seeds from defaults — wired to the **View ▸ Reset layout** affordance. The layout-storage key (`LAYOUT_STORAGE_KEY` in `layoutApi.ts`) is bumped whenever the default layout shape changes, so existing users don't get a stale arrangement re-applied.
 
 The rest of the components are unchanged: each renders a `<div className="panel">…</div>` with its own internal toolbar header. Dockview wraps each in its tab + content frame and handles all dragging, splitting, and resizing.
 

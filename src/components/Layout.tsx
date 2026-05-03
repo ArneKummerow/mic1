@@ -3,12 +3,14 @@ import {
   DockviewReact,
   themeAbyss,
   themeLight,
+  type DockviewApi,
   type DockviewReadyEvent,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
   type SerializedDockview,
 } from 'dockview-react';
 import { useAppStore } from '../store';
+import type { TabBarVisibility } from '../store';
 import 'dockview-react/dist/styles/dockview.css';
 import { MicrocodeEditor } from './MicrocodeEditor';
 import { MacrocodeEditor } from './MacrocodeEditor';
@@ -107,10 +109,25 @@ function persistLayout(state: SerializedDockview): void {
   }
 }
 
+/**
+ * Apply the user's tab-bar visibility policy to the dock. The 'all' / 'none'
+ * cases use a class on the root element so CSS does the work; 'multi' is
+ * computed per-group from the live group→panel-count mapping (a class is
+ * toggled on each group's container).
+ */
+function applyTabBarVisibility(api: DockviewApi, mode: TabBarVisibility): void {
+  for (const group of api.groups) {
+    const el = (group as unknown as { element?: HTMLElement }).element;
+    if (!el) continue;
+    const hideThisGroup = mode === 'none' || (mode === 'multi' && group.panels.length <= 1);
+    el.classList.toggle('mic1-group--hide-tabs', hideThisGroup);
+  }
+}
+
 export function Layout(): JSX.Element {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const theme = useAppStore((s) => s.uiPrefs.theme);
-  const hideTabBars = useAppStore((s) => s.uiPrefs.hideTabBars);
+  const tabBarVisibility = useAppStore((s) => s.uiPrefs.tabBarVisibility);
   const hiddenPanels = useAppStore((s) => s.uiPrefs.hiddenPanels);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
@@ -135,12 +152,17 @@ export function Layout(): JSX.Element {
 
     // Apply current visibility prefs once after layout init.
     reconcileHiddenPanels(api, useAppStore.getState().uiPrefs.hiddenPanels);
+    applyTabBarVisibility(api, useAppStore.getState().uiPrefs.tabBarVisibility);
 
     api.onDidLayoutChange(() => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         persistLayout(api.toJSON());
       }, LAYOUT_DEBOUNCE_MS);
+      // Group composition can change on every layout event (drag, tab move,
+      // panel add/remove); re-derive the per-group hide-tabs class so the
+      // 'multi' policy keeps tracking the live group sizes.
+      applyTabBarVisibility(api, useAppStore.getState().uiPrefs.tabBarVisibility);
     });
   }, []);
 
@@ -157,9 +179,15 @@ export function Layout(): JSX.Element {
     reconcileHiddenPanels(getDockApi(), hiddenPanels);
   }, [hiddenPanels]);
 
+  // Re-apply tab-bar visibility whenever the policy changes.
+  useEffect(() => {
+    const api = getDockApi();
+    if (api) applyTabBarVisibility(api, tabBarVisibility);
+  }, [tabBarVisibility]);
+
   return (
     <DockviewReact
-      className={`mic1-dock${hideTabBars ? ' mic1-dock--hide-tabs' : ''}`}
+      className={`mic1-dock mic1-dock--tabs-${tabBarVisibility}`}
       components={components}
       tabComponents={tabComponents}
       defaultTabComponent={ClosablelessTab}

@@ -42,6 +42,8 @@ export function MacrocodeEditor(): JSX.Element {
   // the operand bytes.
   const currentPc = useAppStore((s) => s.currentOpcodeAddress);
   const theme = useAppStore((s) => s.uiPrefs.theme);
+  const wordWrap = useAppStore((s) => s.uiPrefs.editorWordWrap);
+  const codeJump = useAppStore((s) => s.uiPrefs.editorCodeJump);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -105,8 +107,12 @@ export function MacrocodeEditor(): JSX.Element {
         },
       },
     ]);
-    editor.revealLineInCenterIfOutsideViewport(line);
-  }, [currentPc, ijvmAssembly]);
+    if (codeJump) editor.revealLineInCenterIfOutsideViewport(line);
+  }, [currentPc, ijvmAssembly, codeJump]);
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({ wordWrap: wordWrap ? 'on' : 'off' });
+  }, [wordWrap]);
 
   // Render breakpoint glyphs for any IJVM line whose opcode-dispatch
   // µaddress currently has a breakpoint.
@@ -192,6 +198,7 @@ export function MacrocodeEditor(): JSX.Element {
             scrollBeyondLastLine: false,
             renderLineHighlight: 'line',
             tabSize: 2,
+            wordWrap: wordWrap ? 'on' : 'off',
             automaticLayout: true,
             quickSuggestions: true,
             suggestOnTriggerCharacters: true,

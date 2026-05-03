@@ -20,6 +20,8 @@ export function MicrocodeEditor(): JSX.Element {
   // (the just-executed cycle), falling back to MPC before the first step.
   const currentMpc = useAppStore((s) => s.lastTrace?.mpcBefore ?? s.machine.MPC);
   const theme = useAppStore((s) => s.uiPrefs.theme);
+  const wordWrap = useAppStore((s) => s.uiPrefs.editorWordWrap);
+  const codeJump = useAppStore((s) => s.uiPrefs.editorCodeJump);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -90,8 +92,13 @@ export function MicrocodeEditor(): JSX.Element {
         },
       },
     ]);
-    editor.revealLineInCenterIfOutsideViewport(line);
-  }, [currentMpc, microAssembly]);
+    if (codeJump) editor.revealLineInCenterIfOutsideViewport(line);
+  }, [currentMpc, microAssembly, codeJump]);
+
+  // Sync word-wrap pref into Monaco; the option supports a live update.
+  useEffect(() => {
+    editorRef.current?.updateOptions({ wordWrap: wordWrap ? 'on' : 'off' });
+  }, [wordWrap]);
 
   // Render breakpoint glyphs in the gutter for every line whose µaddress
   // currently has a breakpoint set.
@@ -194,6 +201,7 @@ export function MicrocodeEditor(): JSX.Element {
             scrollBeyondLastLine: false,
             renderLineHighlight: 'line',
             tabSize: 2,
+            wordWrap: wordWrap ? 'on' : 'off',
             automaticLayout: true,
             quickSuggestions: true,
             suggestOnTriggerCharacters: true,

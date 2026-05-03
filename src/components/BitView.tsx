@@ -15,6 +15,7 @@
  * by the Microinstruction Inspector panel.
  */
 import type { BBusSource, Microinstruction, WritableRegister } from '../engine/types';
+import { Tooltip } from './Tooltip';
 import styles from './BitView.module.css';
 
 export type FieldGroup =
@@ -202,14 +203,14 @@ export function BitFieldRow({ instr }: { instr: Microinstruction | undefined }):
         if (f.kind === 'bit') {
           const on = instr !== undefined && !!f.read?.(instr);
           return (
-            <span
-              key={i}
-              className={`${styles.cell} ${styles.bitCell} ${on ? styles.bitOn : styles.bitOff} ${sep}`}
-              style={cellStyle}
-              title={f.title}
-            >
-              <VerticalLabel label={f.label} />
-            </span>
+            <Tooltip key={i} text={f.title}>
+              <span
+                className={`${styles.cell} ${styles.bitCell} ${on ? styles.bitOn : styles.bitOff} ${sep}`}
+                style={cellStyle}
+              >
+                <VerticalLabel label={f.label} />
+              </span>
+            </Tooltip>
           );
         }
 
@@ -218,14 +219,14 @@ export function BitFieldRow({ instr }: { instr: Microinstruction | undefined }):
         if (f.kind === 'hex9') {
           const value = instr === undefined ? '' : fmtNext9(instr.nextAddress);
           return (
-            <span
-              key={i}
-              className={`${styles.cell} ${styles.valueCell} ${styles.nextCell} ${sep}`}
-              style={cellStyle}
-              title={f.title}
-            >
-              <span className={`mono ${styles.nextValue}`}>{value}</span>
-            </span>
+            <Tooltip key={i} text={f.title}>
+              <span
+                className={`${styles.cell} ${styles.valueCell} ${styles.nextCell} ${sep}`}
+                style={cellStyle}
+              >
+                <span className={`mono ${styles.nextValue}`}>{value}</span>
+              </span>
+            </Tooltip>
           );
         }
 
@@ -233,14 +234,14 @@ export function BitFieldRow({ instr }: { instr: Microinstruction | undefined }):
         const reg = instr === undefined ? '' : fmtBBus(instr.bBus);
         const isActive = instr !== undefined && instr.bBus !== 'NONE';
         return (
-          <span
-            key={i}
-            className={`${styles.cell} ${styles.bbusCell} ${isActive ? styles.bitOn : styles.bitOff} ${sep}`}
-            style={cellStyle}
-            title={f.title}
-          >
-            <VerticalLabel label={reg} />
-          </span>
+          <Tooltip key={i} text={f.title}>
+            <span
+              className={`${styles.cell} ${styles.bbusCell} ${isActive ? styles.bitOn : styles.bitOff} ${sep}`}
+              style={cellStyle}
+            >
+              <VerticalLabel label={reg} />
+            </span>
+          </Tooltip>
         );
       })}
     </>

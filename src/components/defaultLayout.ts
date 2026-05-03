@@ -2,104 +2,116 @@ import type { DockviewApi } from 'dockview-react';
 
 /**
  * Default panel arrangement, used on first load and when the user clicks
- * "Layout" in the toolbar.
+ * "Reset layout" in the View menu.
  *
- *   ┌──────────────────┬──────────────────┬──────────────────┐
- *   │  Memory          │                  │                  │
- *   │  Registers       │   Data Path      │  Microcode (MAL) │
- *   │  Stack           │                  │  Macrocode (IJVM)│
- *   ├──────────────────┤                  │  (tabbed)        │
- *   │  Control Store   ├──────────────────┤                  │
- *   │  Console         │ µInst. Inspector │                  │
- *   └──────────────────┴──────────────────┴──────────────────┘
+ *   ┌───────────┬─────────────────────────┬──────────────┐
+ *   │           │  Macrocode (active)     │              │
+ *   │ Data Path │  Control Store          │              │
+ *   │           │  Memory  (tabbed)       │  Microcode   │
+ *   │           │                         │              │
+ *   │           ├──────────┬──────────────┤              │
+ *   ├───────────┤          │              │              │
+ *   │ µInst.    │  Stack   │  Console     │              │
+ *   │ Inspector │          │              │              │
+ *   └───────────┴──────────┴──────────────┴──────────────┘
  *
- * Three columns. Left column has two vertical groups (top:
- * Memory/Registers/Stack, bottom: Control Store/Console). Middle column
- * holds Data Path on top with the Microinstruction Inspector pinned at
- * the bottom (~20% of the column height). Right column holds Microcode +
- * Macrocode tabbed.
+ * Three columns:
+ *   - A (≈20% width): Data Path on top (85%), µInstruction Inspector
+ *     pinned at the bottom (15%).
+ *   - B (≈40% width): top group (60% height) tabs Macrocode / Control
+ *     Store / Memory; bottom split 25/75 into Stack (left, narrow) and
+ *     Console (right, wide).
+ *   - C (≈40% width): Microcode editor (single tab).
+ *
+ * The Registers panel is intentionally not added — it's reachable via the
+ * View menu's "Panels" section, but hidden by default to keep the
+ * arrangement focused on the textbook MIC-1 surfaces.
  */
+
+// Approximate target widths/heights, in pixels relative to a baseline window.
+// Dockview snaps these to whatever fits, but the proportions hold.
+const COL_A_WIDTH = 440;
+const COL_B_WIDTH = 700;
+// COL_C absorbs the remainder.
+
+const A_INSPECTOR_HEIGHT = 120; // ≈15% of column A
+const B_BOTTOM_HEIGHT = 360; // ≈40% of column B
+const B_BOTTOM_STACK_WIDTH = 180; // ≈25% of the bottom row — Stack stays narrow
+
 export function applyDefaultLayout(api: DockviewApi): void {
-  // 1. Establish all three columns first so subsequent vertical splits stay local.
-
-  // Left column anchor: Memory.
-  api.addPanel({
-    id: 'memory',
-    component: 'memory',
-    title: 'Memory',
-  });
-
-  // Middle column: Data Path (top) and Microinstruction Inspector (bottom).
+  // Column A anchor — Data Path.
   api.addPanel({
     id: 'dataPath',
     component: 'dataPath',
     title: 'Data Path',
-    position: { referencePanel: 'memory', direction: 'right' },
   });
 
-  // Right column: Microcode (active) + Macrocode tab.
-  api.addPanel({
-    id: 'microcode',
-    component: 'microcode',
-    title: 'Microcode (MAL)',
-    position: { referencePanel: 'dataPath', direction: 'right' },
-  });
+  // Column B anchor — Macrocode (active tab of the top-B group).
   api.addPanel({
     id: 'macrocode',
     component: 'macrocode',
     title: 'Macrocode (IJVM)',
-    position: { referencePanel: 'microcode', direction: 'within' },
+    position: { referencePanel: 'dataPath', direction: 'right' },
+  });
+
+  // Column C — Microcode (single tab).
+  api.addPanel({
+    id: 'microcode',
+    component: 'microcode',
+    title: 'Microcode (MAL)',
+    position: { referencePanel: 'macrocode', direction: 'right' },
+  });
+
+  // Tabs alongside Macrocode in the top-B group.
+  api.addPanel({
+    id: 'controlStore',
+    component: 'controlStore',
+    title: 'Control Store',
+    position: { referencePanel: 'macrocode', direction: 'within' },
+    inactive: true,
+  });
+  api.addPanel({
+    id: 'memory',
+    component: 'memory',
+    title: 'Memory',
+    position: { referencePanel: 'macrocode', direction: 'within' },
     inactive: true,
   });
 
-  // 2. Split the middle column vertically — Microinstruction Inspector
-  //    pinned below the Data Path. Dockview uses 50/50 by default; we
-  //    resize the inspector to roughly 20% of the column height afterwards.
+  // Column A bottom — µInstruction Inspector.
   api.addPanel({
     id: 'microInspector',
     component: 'microInspector',
     title: 'µInst. Inspector',
     position: { referencePanel: 'dataPath', direction: 'below' },
   });
-  // Try to give the data path most of the vertical space.
-  const inspector = api.getPanel('microInspector');
-  if (inspector) {
-    try {
-      inspector.api.setSize({ height: 140 });
-    } catch {
-      // Older dockview versions may not support setSize; default 50/50 is fine.
-    }
-  }
 
-  // 3. Now split the left column vertically — stays inside the left column
-  //    because the column boundaries are already established.
+  // Column B bottom — Stack (left, narrow) and Console (right, wide).
   api.addPanel({
-    id: 'controlStore',
-    component: 'controlStore',
-    title: 'Control Store',
-    position: { referencePanel: 'memory', direction: 'below' },
+    id: 'stack',
+    component: 'stack',
+    title: 'Stack',
+    position: { referencePanel: 'macrocode', direction: 'below' },
   });
   api.addPanel({
     id: 'console',
     component: 'console',
     title: 'Console',
-    position: { referencePanel: 'controlStore', direction: 'within' },
-    inactive: true,
+    position: { referencePanel: 'stack', direction: 'right' },
   });
 
-  // 4. Extra tabs in the left-top group.
-  api.addPanel({
-    id: 'registers',
-    component: 'registers',
-    title: 'Registers',
-    position: { referencePanel: 'memory', direction: 'within' },
-    inactive: true,
-  });
-  api.addPanel({
-    id: 'stack',
-    component: 'stack',
-    title: 'Stack',
-    position: { referencePanel: 'memory', direction: 'within' },
-    inactive: true,
-  });
+  // Resize to the target proportions. Some Dockview versions reject `setSize`
+  // on freshly-created groups, so wrap each call individually.
+  const trySetSize = (id: string, size: { width?: number; height?: number }): void => {
+    try {
+      api.getPanel(id)?.api.setSize(size);
+    } catch {
+      // Older dockview versions: silently fall back to default sizing.
+    }
+  };
+
+  trySetSize('dataPath', { width: COL_A_WIDTH });
+  trySetSize('macrocode', { width: COL_B_WIDTH });
+  trySetSize('microInspector', { height: A_INSPECTOR_HEIGHT });
+  trySetSize('stack', { height: B_BOTTOM_HEIGHT, width: B_BOTTOM_STACK_WIDTH });
 }
