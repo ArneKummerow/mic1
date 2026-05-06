@@ -59,3 +59,18 @@ Full setup, install options (fnm / nvm / package manager), editor setup, deploym
 - [docs/UI_DESIGN.md](docs/UI_DESIGN.md) — layout, panels, and interaction design.
 - [docs/TECH_STACK.md](docs/TECH_STACK.md) — chosen technologies and dependencies.
 - [docs/MIC1_REFERENCE.md](docs/MIC1_REFERENCE.md) — short summary of the MIC-1/IJVM model the simulator implements.
+
+## License
+
+Copyright (C) 2026 Arne Kummerow
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+See [LICENSE](LICENSE) for the full text.
