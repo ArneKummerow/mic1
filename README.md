@@ -2,6 +2,8 @@
 
 An interactive, browser-based simulator and visualizer for the **MIC-1** CPU architecture from Andrew S. Tanenbaum's *Structured Computer Organization*.
 
+**Try it live:** <https://arnekummerow.github.io/mic1/>
+
 ## What it does
 
 The MIC-1 is a teaching CPU: a microprogrammed machine whose microcode interprets the **IJVM** (Integer Java Virtual Machine) instruction set. Understanding it means understanding three layers at once — the data path, the microinstructions that drive it, and the macroinstructions those microinstructions implement. This tool makes all three visible and editable side-by-side.

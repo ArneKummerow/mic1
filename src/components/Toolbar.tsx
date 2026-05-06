@@ -9,7 +9,10 @@ import {
   AlertTriangle,
   Square,
   BookOpen,
+  Github,
 } from 'lucide-react';
+
+const REPO_URL = 'https://github.com/ArneKummerow/mic1';
 import { useAppStore, type ExecutionMode, TURBO_THRESHOLD } from '../store';
 import { ViewMenu } from './ViewMenu';
 import { FileMenu } from './FileMenu';
@@ -119,6 +122,14 @@ export function Toolbar(): JSX.Element {
         <button onClick={openDocsTab} title="Open documentation in a new tab" aria-label="Open documentation in a new tab">
           <BookOpen size={14} />
           <span>Docs</span>
+        </button>
+        <button
+          onClick={() => window.open(REPO_URL, '_blank', 'noopener')}
+          title="View source on GitHub"
+          aria-label="View source on GitHub"
+        >
+          <Github size={14} />
+          <span>GitHub</span>
         </button>
         <StatusPill mode={mode} hasErrors={hasErrors} errorCount={errorCount} mpc={lastTrace?.mpcAfter ?? 0} />
       </div>
