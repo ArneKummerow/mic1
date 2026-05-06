@@ -73,14 +73,17 @@ export function MacrocodeEditor(): JSX.Element {
       message: e.message,
     }));
     monaco.editor.setModelMarkers(model, 'ijvm', markers);
-
-    editor.updateOptions({
-      lineNumbers: (n: number) => {
-        const a = assemblyRef.current?.addressByLine.get(n);
-        return a !== undefined ? fmtByteAddr(a) : '';
-      },
-    });
   }, [ijvmAssembly]);
+
+  // Custom gutter renderer: show the byte address in hex instead of raw
+  // line numbers. Passed via the `options` prop so it survives the
+  // re-applied options reconciliation that @monaco-editor/react performs
+  // on every re-render — otherwise toggling state like word-wrap or
+  // breakpoints would revert the gutter to plain line numbers.
+  const lineNumbersFn = useRef((n: number): string => {
+    const a = assemblyRef.current?.addressByLine.get(n);
+    return a !== undefined ? fmtByteAddr(a) : '';
+  }).current;
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -109,10 +112,6 @@ export function MacrocodeEditor(): JSX.Element {
     ]);
     if (codeJump) editor.revealLineInCenterIfOutsideViewport(line);
   }, [currentPc, ijvmAssembly, codeJump]);
-
-  useEffect(() => {
-    editorRef.current?.updateOptions({ wordWrap: wordWrap ? 'on' : 'off' });
-  }, [wordWrap]);
 
   // Render breakpoint glyphs for any IJVM line whose opcode-dispatch
   // µaddress currently has a breakpoint.
@@ -166,13 +165,6 @@ export function MacrocodeEditor(): JSX.Element {
       if (mpc === null) return;
       toggleBreakpoint(mpc);
     });
-
-    ed.updateOptions({
-      lineNumbers: (n: number) => {
-        const a = assemblyRef.current?.addressByLine.get(n);
-        return a !== undefined ? fmtByteAddr(a) : '';
-      },
-    });
   };
 
   return (
@@ -191,7 +183,7 @@ export function MacrocodeEditor(): JSX.Element {
           options={{
             minimap: { enabled: false },
             fontSize: cssFontSize('--fs-md', 13),
-            lineNumbers: 'on',
+            lineNumbers: lineNumbersFn,
             lineNumbersMinChars: 6,
             glyphMargin: true,
             folding: false,

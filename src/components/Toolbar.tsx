@@ -17,11 +17,15 @@ import styles from './Toolbar.module.css';
 
 const SPEED_PRESETS = [1, 2, 4, 10, 50, 200, 1000, 10000];
 
-interface ToolbarProps {
-  onOpenDocs: () => void;
+// Open the docs in a new browser tab so students can keep the simulator
+// visible alongside. Resolved against the current location so the build's
+// base path (and any `?query`) is preserved.
+function openDocsTab(): void {
+  const url = `${window.location.pathname}${window.location.search}#docs`;
+  window.open(url, '_blank', 'noopener');
 }
 
-export function Toolbar({ onOpenDocs }: ToolbarProps): JSX.Element {
+export function Toolbar(): JSX.Element {
   const mode = useAppStore((s) => s.mode);
   const speed = useAppStore((s) => s.speed);
   const errorCount = useAppStore((s) => (s.microAssembly?.errors.length ?? 0) + (s.ijvmAssembly?.errors.length ?? 0));
@@ -112,7 +116,7 @@ export function Toolbar({ onOpenDocs }: ToolbarProps): JSX.Element {
       <div className={styles.right}>
         <FileMenu />
         <ViewMenu />
-        <button onClick={onOpenDocs} title="Open documentation" aria-label="Open documentation">
+        <button onClick={openDocsTab} title="Open documentation in a new tab" aria-label="Open documentation in a new tab">
           <BookOpen size={14} />
           <span>Docs</span>
         </button>

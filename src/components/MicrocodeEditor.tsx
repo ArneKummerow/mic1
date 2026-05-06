@@ -56,15 +56,19 @@ export function MicrocodeEditor(): JSX.Element {
       message: e.message,
     }));
     monaco.editor.setModelMarkers(model, 'mal', markers);
-
-    // Force the gutter to re-render with the new address mapping.
-    editor.updateOptions({
-      lineNumbers: (n: number) => {
-        const a = assemblyRef.current?.addressByLine.get(n);
-        return a !== undefined ? fmtMpc(a) : '';
-      },
-    });
   }, [microAssembly]);
+
+  // Custom gutter renderer: show the assembled µaddress in hex instead of
+  // raw line numbers. Reads from `assemblyRef.current` so the latest mapping
+  // is always used; we pass it via the `options` prop (rather than only via
+  // `editor.updateOptions` once at mount) because @monaco-editor/react
+  // re-applies the `options` prop on every re-render — without this the
+  // string `lineNumbers: 'on'` from the options literal would clobber our
+  // custom renderer whenever any state (breakpoints, word-wrap, …) changes.
+  const lineNumbersFn = useRef((n: number): string => {
+    const a = assemblyRef.current?.addressByLine.get(n);
+    return a !== undefined ? fmtMpc(a) : '';
+  }).current;
 
   // Highlight the source line corresponding to the current MPC.
   useEffect(() => {
@@ -94,11 +98,6 @@ export function MicrocodeEditor(): JSX.Element {
     ]);
     if (codeJump) editor.revealLineInCenterIfOutsideViewport(line);
   }, [currentMpc, microAssembly, codeJump]);
-
-  // Sync word-wrap pref into Monaco; the option supports a live update.
-  useEffect(() => {
-    editorRef.current?.updateOptions({ wordWrap: wordWrap ? 'on' : 'off' });
-  }, [wordWrap]);
 
   // Render breakpoint glyphs in the gutter for every line whose µaddress
   // currently has a breakpoint set.
@@ -150,16 +149,6 @@ export function MicrocodeEditor(): JSX.Element {
       if (addr === undefined) return;
       toggleBreakpoint(addr);
     });
-
-    // Custom gutter content: show the assembled µaddress in hex instead of
-    // raw line numbers. Lines that don't emit a microinstruction render
-    // empty (their stock line number is uninteresting).
-    ed.updateOptions({
-      lineNumbers: (n: number) => {
-        const a = assemblyRef.current?.addressByLine.get(n);
-        return a !== undefined ? fmtMpc(a) : '';
-      },
-    });
   };
 
   const handleFormat = (): void => {
@@ -194,7 +183,7 @@ export function MicrocodeEditor(): JSX.Element {
           options={{
             minimap: { enabled: false },
             fontSize: cssFontSize('--fs-md', 13),
-            lineNumbers: 'on',
+            lineNumbers: lineNumbersFn,
             lineNumbersMinChars: 5,
             glyphMargin: true,
             folding: false,

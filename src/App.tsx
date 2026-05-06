@@ -6,10 +6,19 @@ import { useKeyboardShortcuts } from './components/useKeyboardShortcuts';
 import { useAppStore } from './store';
 import './styles/layout.css';
 
+const DOCS_HASH = '#docs';
+
+function isDocsRoute(): boolean {
+  return window.location.hash === DOCS_HASH;
+}
+
 export function App(): JSX.Element {
   useKeyboardShortcuts();
 
-  const [showDocs, setShowDocs] = useState(false);
+  // Docs render in their own browser tab so the user can read alongside the
+  // simulator. The tab is identified by `#docs` in the URL — both freshly
+  // opened (via the Toolbar's "Docs" button) and reload-resilient.
+  const [docsRoute, setDocsRoute] = useState(isDocsRoute);
 
   const theme = useAppStore((s) => s.uiPrefs.theme);
   useEffect(() => {
@@ -17,19 +26,31 @@ export function App(): JSX.Element {
   }, [theme]);
 
   useEffect(() => {
-    if (!showDocs) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setShowDocs(false);
+    const onHash = (): void => setDocsRoute(isDocsRoute());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  useEffect(() => {
+    if (!docsRoute) return;
+    const prev = document.title;
+    document.title = 'MIC-1 Documentation';
+    return () => {
+      document.title = prev;
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showDocs]);
+  }, [docsRoute]);
+
+  if (docsRoute) {
+    // `window.close()` only succeeds for tabs opened via script (which is
+    // how the Toolbar opens this one). If the user landed here by other
+    // means, it's a no-op — they'll just close the tab themselves.
+    return <Docs onClose={() => window.close()} />;
+  }
 
   return (
     <div className="app-root">
-      <Toolbar onOpenDocs={() => setShowDocs(true)} />
+      <Toolbar />
       <Layout />
-      {showDocs && <Docs onClose={() => setShowDocs(false)} />}
     </div>
   );
 }

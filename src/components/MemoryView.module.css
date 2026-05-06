@@ -1,20 +1,26 @@
 .body {
   flex: 1;
   display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .gridSection {
   flex: 1 1 auto;
-  overflow: auto;
-  padding: 6px 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 10px 6px;
 }
 
 .gridHeader,
 .gridRow {
   display: flex;
   align-items: center;
-  gap: 4px;
+  /* No inter-cell gap: highlighted cells need to touch each other so
+   * multi-byte ranges render as one continuous bar instead of striped
+   * rectangles separated by dead space. Per-cell padding (below) supplies
+   * the visual breathing room when a cell is *not* highlighted. */
+  gap: 0;
   font-size: var(--fs-sm);
   white-space: nowrap;
 }
@@ -23,23 +29,35 @@
   font-weight: 700;
   color: var(--fg-3);
   border-bottom: 1px solid var(--bg-3);
-  padding-bottom: 4px;
-  margin-bottom: 4px;
+  padding: 4px 10px;
+  background: var(--bg-2);
+  flex-shrink: 0;
 }
 
+/*
+ * Fixed row height keeps virtualization math simple — must stay in sync
+ * with `ROW_HEIGHT` in MemoryView.tsx.
+ */
 .gridRow {
-  padding: 1px 0;
+  height: 18px;
+  padding: 0;
 }
 
 .addrCol {
-  flex: 0 0 40px;
+  flex: 0 0 48px;
+  padding-right: 8px;
   color: var(--fg-3);
 }
 
 .byteCol {
-  flex: 0 0 18px;
+  flex: 0 0 22px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: var(--fg-1);
+  position: relative;
 }
 
 .gridHeader .byteCol {
@@ -48,20 +66,55 @@
 
 .asciiCol {
   flex: 0 0 auto;
-  margin-left: 8px;
+  margin-left: 12px;
   color: var(--fg-2);
   letter-spacing: 1px;
 }
 
+/*
+ * Register highlights. Each rule fills the whole cell; with `gap: 0` on the
+ * row, adjacent highlighted cells merge into one continuous bar, which is
+ * exactly what we want for multi-byte words and the full IJVM instruction
+ * range.
+ *
+ * Class declaration order encodes priority: when several highlights apply
+ * to the same byte, the LAST matching rule below wins for `background`.
+ * Order from lowest to highest priority:
+ *   CPP → LV → PC-instr → SP → MAR → PC byte
+ */
+.cppByte {
+  background: color-mix(in srgb, var(--bus-a) 55%, transparent);
+}
+.lvByte {
+  background: color-mix(in srgb, var(--mem-read) 55%, transparent);
+}
+.pcRange {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.spByte {
+  background: color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+.marByte {
+  background: color-mix(in srgb, var(--mem-fetch) 55%, transparent);
+}
 .pcByte {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent);
   color: var(--bg-1);
-  border-radius: 2px;
+  font-weight: 700;
 }
 
-.marByte {
-  background: color-mix(in srgb, var(--mem-fetch) 25%, transparent);
-  border-radius: 2px;
+/*
+ * Round only the outer corners of each contiguous highlighted run, so the
+ * bar reads as a single pill rather than a strip of beveled rectangles.
+ * `runStart` / `runEnd` are added in MemoryView.tsx based on neighbor state.
+ */
+.runStart {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+}
+.runEnd {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
 }
 
 .miniToolbar {
@@ -91,14 +144,3 @@
   font: inherit;
   font-size: var(--fs-sm);
 }
-
-.fixedInput {
-  background: var(--bg-3);
-  color: var(--fg-1);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-size: var(--fs-sm);
-  width: 80px;
-}
-
