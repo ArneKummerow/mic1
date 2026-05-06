@@ -36,7 +36,7 @@ const COL_B_WIDTH = 700;
 
 const A_INSPECTOR_HEIGHT = 120; // ≈15% of column A
 const B_BOTTOM_HEIGHT = 360; // ≈40% of column B
-const B_BOTTOM_STACK_WIDTH = 180; // ≈25% of the bottom row — Stack stays narrow
+const B_BOTTOM_STACK_WIDTH = 300; // ≈40% of the bottom row — Stack needs room for hex + dec
 
 export function applyDefaultLayout(api: DockviewApi): void {
   // Column A anchor — Data Path.

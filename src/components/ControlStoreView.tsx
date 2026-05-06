@@ -32,12 +32,20 @@ function summarizeAlu(instr: Microinstruction): string {
   return core;
 }
 
-function summarizeMem(instr: Microinstruction): string {
-  const parts: string[] = [];
-  if (instr.mem.read) parts.push('rd');
-  if (instr.mem.write) parts.push('wr');
-  if (instr.mem.fetch) parts.push('fe');
-  return parts.join('|');
+function MemCell({ instr }: { instr: Microinstruction | undefined }): JSX.Element {
+  if (!instr) return <span className={`mono ${styles.mem}`} />;
+  const parts: JSX.Element[] = [];
+  if (instr.mem.read) parts.push(<span key="rd" className={styles.memRead}>rd</span>);
+  if (instr.mem.write) parts.push(<span key="wr" className={styles.memWrite}>wr</span>);
+  if (instr.mem.fetch) parts.push(<span key="fe" className={styles.memFetch}>fe</span>);
+  // Interleave with `|` separators so the column reads the same as before
+  // (rd|wr|fe) but each op gets its own per-op color matching the data path.
+  const interleaved: (JSX.Element | string)[] = [];
+  parts.forEach((p, i) => {
+    if (i > 0) interleaved.push('|');
+    interleaved.push(p);
+  });
+  return <span className={`mono ${styles.mem}`}>{interleaved}</span>;
 }
 
 function summarizeJam(instr: Microinstruction): string {
@@ -120,7 +128,7 @@ function Row({
         <>
           <span className={`mono ${styles.alu}`}>{instr ? summarizeAlu(instr) : '—'}</span>
           <span className={`mono ${styles.cBus}`}>{instr ? [...instr.cBus].join(',') : ''}</span>
-          <span className={`mono ${styles.mem}`}>{instr ? summarizeMem(instr) : ''}</span>
+          <MemCell instr={instr} />
           <span className={`mono ${styles.next}`}>{instr ? `→${fmtMpc(instr.nextAddress)}` : ''}</span>
           <span className={`mono ${styles.jam}`}>{instr ? summarizeJam(instr) : ''}</span>
         </>

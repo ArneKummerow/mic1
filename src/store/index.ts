@@ -57,7 +57,22 @@ export interface AppState {
   // Execution.
   mode: ExecutionMode;
   speed: number; // microsteps per second
+  /**
+   * Microcode breakpoints — set of MPC values. Hits whenever the just-
+   * executed cycle landed at one of these µaddresses, regardless of which
+   * IJVM instruction triggered it. A breakpoint set on an opcode-handler
+   * entry therefore fires for *every* instance of that opcode in the
+   * program; that's the right semantic for studying the handler itself,
+   * but for "stop at *this* macroinstruction" you want `macroBreakpoints`.
+   */
   breakpoints: ReadonlySet<number>;
+  /**
+   * Macrocode breakpoints — set of IJVM byte addresses. Hits when Main1
+   * is about to dispatch the opcode living at that byte address; lets the
+   * user pause at one specific call site without also stopping at every
+   * other use of the same opcode elsewhere in the program.
+   */
+  macroBreakpoints: ReadonlySet<number>;
   lastTrace: MicroTrace | null;
   errorMessage: string | null;
 
@@ -102,6 +117,7 @@ export interface AppState {
   pause: () => void;
   setSpeed: (speed: number) => void;
   toggleBreakpoint: (addr: number) => void;
+  toggleMacroBreakpoint: (byteAddr: number) => void;
   clearConsoleOutput: () => void;
   appendConsoleInput: (s: string) => void;
   resetToDefaults: () => void;
@@ -203,6 +219,7 @@ export const useAppStore = create<AppState>()(
         mode: 'paused',
         speed: 4,
         breakpoints: new Set<number>(),
+        macroBreakpoints: new Set<number>(),
         lastTrace: null,
         errorMessage: null,
         consoleOutput: '',
@@ -240,7 +257,7 @@ export const useAppStore = create<AppState>()(
         },
 
         microstep: () => {
-          const { machine, breakpoints } = get();
+          const { machine, breakpoints, macroBreakpoints } = get();
           if (machine.halted) {
             set({ mode: 'halted' });
             return;
@@ -263,21 +280,24 @@ export const useAppStore = create<AppState>()(
               machine.consoleOutputBuffer.length = 0;
             }
             const wasStalled = trace.mpcAfter === trace.mpcBefore && machine.waitingForInput;
+            // A Main1 dispatch (MPC 0 → opcode handler) means a new IJVM
+            // instruction is about to be processed; PC at this moment is the
+            // byte address of that opcode (Main1 is `goto (MBR)` and doesn't
+            // touch PC, see defaultMicrocode.ts).
+            const dispatchedNew = trace.mpcBefore === 0 && trace.mpcAfter !== 0;
+            const hitMacroBreakpoint =
+              dispatchedNew && macroBreakpoints.has(machine.PC);
             const newMode: ExecutionMode = machine.halted
               ? 'halted'
               : machine.waitingForInput
                 ? 'waiting-for-input'
                 : trace.mpcAfter === trace.mpcBefore
                   ? 'halted'
-                  : breakpoints.has(trace.mpcAfter)
+                  : breakpoints.has(trace.mpcAfter) || hitMacroBreakpoint
                     ? 'paused'
                     : get().mode === 'running' || get().mode === 'waiting-for-input'
                       ? 'running'
                       : 'paused';
-            // A Main1 dispatch (MPC 0 → opcode handler) means a new IJVM
-            // instruction is about to be processed; PC at this moment is the
-            // byte address of that opcode.
-            const dispatchedNew = trace.mpcBefore === 0 && trace.mpcAfter !== 0;
             // Mirror the post-step input buffer back to the UI-facing
             // string. The simulator may have drained bytes from it.
             const inputView = String.fromCharCode(...machine.consoleInputBuffer);
@@ -394,6 +414,13 @@ export const useAppStore = create<AppState>()(
           stopInterval();
           set({ speed });
           if (wasRunning) get().run();
+        },
+
+        toggleMacroBreakpoint: (byteAddr) => {
+          const next = new Set(get().macroBreakpoints);
+          if (next.has(byteAddr)) next.delete(byteAddr);
+          else next.add(byteAddr);
+          set({ macroBreakpoints: next });
         },
 
         toggleBreakpoint: (addr) => {

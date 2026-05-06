@@ -82,7 +82,22 @@
 }
 .row .mem {
   flex: 0 0 50px;
+  color: var(--fg-3);
+  display: inline-flex;
+  gap: 0;
+}
+
+.memRead {
+  color: var(--mem-read);
+  font-weight: 600;
+}
+.memWrite {
+  color: var(--mem-write);
+  font-weight: 600;
+}
+.memFetch {
   color: var(--mem-fetch);
+  font-weight: 600;
 }
 .row .next {
   flex: 0 0 60px;

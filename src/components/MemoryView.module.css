@@ -18,8 +18,8 @@
   align-items: center;
   /* No inter-cell gap: highlighted cells need to touch each other so
    * multi-byte ranges render as one continuous bar instead of striped
-   * rectangles separated by dead space. Per-cell padding (below) supplies
-   * the visual breathing room when a cell is *not* highlighted. */
+   * rectangles separated by dead space. Per-cell padding inside `.byteCol`
+   * supplies the visual breathing room when a cell is *not* highlighted. */
   gap: 0;
   font-size: var(--fs-sm);
   white-space: nowrap;
@@ -72,41 +72,20 @@
 }
 
 /*
- * Register highlights. Each rule fills the whole cell; with `gap: 0` on the
- * row, adjacent highlighted cells merge into one continuous bar, which is
- * exactly what we want for multi-byte words and the full IJVM instruction
- * range.
- *
- * Class declaration order encodes priority: when several highlights apply
- * to the same byte, the LAST matching rule below wins for `background`.
- * Order from lowest to highest priority:
- *   CPP → LV → PC-instr → SP → MAR → PC byte
+ * Soft tint for bytes that lie in the current IJVM instruction range but
+ * aren't pointed at by any explicit register. When a harder register *is*
+ * present, MemoryView.tsx skips this class and the inline-style stripe
+ * gradient (one stripe per pointing register) becomes the visible cue.
  */
-.cppByte {
-  background: color-mix(in srgb, var(--bus-a) 55%, transparent);
-}
-.lvByte {
-  background: color-mix(in srgb, var(--mem-read) 55%, transparent);
-}
-.pcRange {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.spByte {
-  background: color-mix(in srgb, var(--accent-2) 60%, transparent);
-}
-.marByte {
-  background: color-mix(in srgb, var(--mem-fetch) 55%, transparent);
-}
-.pcByte {
-  background: var(--accent);
-  color: var(--bg-1);
-  font-weight: 700;
+.pcRangeCell {
+  background: color-mix(in srgb, var(--reg-pc) 18%, transparent);
 }
 
 /*
  * Round only the outer corners of each contiguous highlighted run, so the
  * bar reads as a single pill rather than a strip of beveled rectangles.
- * `runStart` / `runEnd` are added in MemoryView.tsx based on neighbor state.
+ * `runStart` / `runEnd` are toggled in MemoryView.tsx based on whether
+ * the neighboring byte is also highlighted by *any* register.
  */
 .runStart {
   border-top-left-radius: 3px;

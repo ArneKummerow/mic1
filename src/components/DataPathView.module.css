@@ -190,6 +190,10 @@
   font-family: ui-monospace, monospace;
   font-size: 11px;
   text-anchor: start;
+  /* Match the MEM label's baseline so rd/wr/fetch sit on the same line as
+   * "MEM" rather than floating above it (SVG text defaults to alphabetic
+   * baseline, which sits a few px higher than `middle`). */
+  dominant-baseline: middle;
   transition: fill 220ms ease;
 }
 

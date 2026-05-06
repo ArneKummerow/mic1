@@ -1,19 +1,36 @@
 .body {
   flex: 1;
-  overflow: auto;
-  padding: 8px 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  min-height: 0;
+}
+
+/*
+ * Bottom-pin trick: a flex-grow spacer above the entries occupies any
+ * leftover vertical space, so when the stack is shorter than the panel its
+ * base sits at the bottom of the view and new pushes appear above. When
+ * the entry list is taller than the panel, the spacer collapses to 0 and
+ * the body scrolls normally.
+ */
+.spacer {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 3px 6px;
-  font-size: var(--fs-md);
+  padding: 0 6px;
+  /* Fixed height keeps the auto-follow scroll math (row count × row height)
+   * exact — must stay in sync with `ROW_HEIGHT` in StackView.tsx. */
+  height: 22px;
+  font-size: var(--fs-sm);
   border-bottom: 1px solid var(--bg-3);
+  flex-shrink: 0;
 }
 
 .row:last-child {
@@ -25,11 +42,24 @@
   flex: 0 0 auto;
 }
 
-.value {
+.hex {
   color: var(--fg-1);
-  font-weight: 500;
-  flex: 1;
+  flex: 0 0 auto;
+}
+
+.dec {
+  color: var(--fg-2);
+  flex: 1 1 auto;
   text-align: right;
+}
+
+.tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 56px;
+  justify-content: flex-end;
 }
 
 .tag {
@@ -38,27 +68,28 @@
   padding: 1px 5px;
   border-radius: 3px;
   text-transform: uppercase;
-  flex: 0 0 auto;
-  min-width: 30px;
   text-align: center;
 }
 
+/*
+ * TOS row uses --reg-sp because SP is what *points* to TOS in memory; in
+ * MemoryView the same word is highlighted in --reg-sp's color, so the two
+ * panels read as referring to the same slot.
+ */
 .tosRow {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--reg-sp) 15%, transparent);
 }
-
-.tosRow .tag {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
+.tagTos {
+  color: var(--reg-sp);
+  background: color-mix(in srgb, var(--reg-sp) 25%, transparent);
 }
 
 .lvRow {
-  background: color-mix(in srgb, var(--bus-c) 12%, transparent);
+  background: color-mix(in srgb, var(--reg-lv) 14%, transparent);
 }
-
-.lvRow .tag {
-  color: var(--bus-c);
-  background: color-mix(in srgb, var(--bus-c) 25%, transparent);
+.tagLv {
+  color: var(--reg-lv);
+  background: color-mix(in srgb, var(--reg-lv) 25%, transparent);
 }
 
 .empty {
@@ -66,4 +97,6 @@
   font-style: italic;
   padding: 1rem;
   text-align: center;
+  margin-top: auto;
+  margin-bottom: 1rem;
 }

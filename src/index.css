@@ -26,6 +26,21 @@
   --reg-flash: #f0e442; /* yellow */
   --error: #ff6b6b;
   --halted: #8b95a3;
+
+  /* Per-register accent colors. Used wherever a memory-associated register
+   * (or the slot it points at) is shown — DataPathView, RegisterPanel,
+   * MemoryView, StackView, ControlStoreView — so the same register reads
+   * as the same color across the whole UI. */
+  --reg-pc: var(--accent);
+  --reg-mar: var(--mem-fetch);
+  --reg-sp: var(--accent-2);
+  --reg-lv: var(--mem-read);
+  --reg-cpp: var(--bus-a);
+  /* TOS shares SP's color: SP points at the TOS slot, so visually treating
+   * them as one cue (orange in both Memory and Stack views, and on the
+   * SP/TOS register names in Data Path / Register Panel) ties the
+   * concept together. */
+  --reg-tos: var(--reg-sp);
 }
 
 :root[data-theme='light'] {
@@ -54,6 +69,13 @@
   --reg-flash: #966500;
   --error: #cf222e;
   --halted: #6e7781;
+
+  --reg-pc: var(--accent);
+  --reg-mar: var(--mem-fetch);
+  --reg-sp: var(--accent-2);
+  --reg-lv: var(--mem-read);
+  --reg-cpp: var(--bus-a);
+  --reg-tos: var(--reg-sp);
 }
 
 :root {
@@ -141,10 +163,14 @@ code,
 
 .mic1-bp-glyph {
   /* Red dot in the glyph margin. Positioned via background-image so it
-     coexists with `.mic1-current-glyph` on the same line. */
-  background: radial-gradient(circle at center, var(--error) 0 4px, transparent 5px) no-repeat
-    center;
-  width: 12px !important;
+     coexists with `.mic1-current-glyph` on the same line.
+     Monaco sizes the glyph column at lineHeight × decorationLaneCount
+     (~22px). The dot is painted near the right edge of an explicit
+     22px-wide box so it sits flush against the address column rather
+     than floating in the middle of the column. */
+  background: radial-gradient(circle at calc(100% - 4px) center, var(--error) 0 4px, transparent 5px)
+    no-repeat;
+  width: 22px !important;
   cursor: pointer;
 }
 

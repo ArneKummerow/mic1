@@ -34,6 +34,27 @@ function fmtHex(n: number, width: number): string {
  * the following instruction; `sbyte`/`uword` operands keep their natural
  * size in this simulator (matches the WIDE handlers in defaultMicrocode.ts).
  */
+/** Does any register or the current IJVM instruction range cover `addr`? */
+function isHighlighted(
+  addr: number,
+  pcByte: number,
+  marByte: number,
+  spByte: number,
+  lvByte: number,
+  cppByte: number,
+  instrStart: number,
+  instrEnd: number,
+): boolean {
+  return (
+    addr === pcByte ||
+    (addr >= marByte && addr < marByte + 4) ||
+    (addr >= spByte && addr < spByte + 4) ||
+    (addr >= lvByte && addr < lvByte + 4) ||
+    (addr >= cppByte && addr < cppByte + 4) ||
+    (addr >= instrStart && addr < instrEnd)
+  );
+}
+
 function instructionByteLength(memory: Uint8Array, addr: number): number {
   const op = memory[addr];
   if (op === undefined) return 1;
@@ -175,58 +196,69 @@ export function MemoryView(): JSX.Element {
                     addr >= base && addr < base + 4;
                   const inInstr = addr >= instrStart && addr < instrEnd;
 
-                  // Tags drive both visual treatment and the hover label.
-                  // Order here mirrors CSS declaration order: the LAST
-                  // matching class in the stylesheet wins for `background`,
-                  // so cell priority is encoded by the order of the rules
-                  // below — see MemoryView.module.css.
+                  // Collect every register pointing at this byte, in a
+                  // stable order so the stripe order stays the same as
+                  // the user steps. PC byte is its own entry (single byte
+                  // and bright) — the surrounding instruction range gets
+                  // a softer fill via `pcRangeCell` only when *no* harder
+                  // register applies, otherwise the harder colors win the
+                  // visible stripes and the soft band merges with them.
+                  const colors: string[] = [];
                   const tags: string[] = [];
-                  if (inWord(cppByte)) tags.push('CPP');
-                  if (inWord(lvByte)) tags.push('LV');
+                  if (addr === pcByte) {
+                    colors.push('var(--reg-pc)');
+                    tags.push('PC');
+                  }
+                  if (inWord(marByte)) {
+                    colors.push('var(--reg-mar)');
+                    tags.push('MAR');
+                  }
+                  if (inWord(spByte)) {
+                    colors.push('var(--reg-sp)');
+                    tags.push('SP');
+                  }
+                  if (inWord(lvByte)) {
+                    colors.push('var(--reg-lv)');
+                    tags.push('LV');
+                  }
+                  if (inWord(cppByte)) {
+                    colors.push('var(--reg-cpp)');
+                    tags.push('CPP');
+                  }
                   if (inInstr) tags.push('PC instr');
-                  if (inWord(spByte)) tags.push('SP');
-                  if (inWord(marByte)) tags.push('MAR');
-                  if (addr === pcByte) tags.push('PC');
 
-                  // For continuous-bar look: mark the leftmost / rightmost
-                  // cell of each contiguous highlighted run so we can round
-                  // those outer corners only.
-                  const highlighted = tags.length > 0;
+                  const highlighted = colors.length > 0 || inInstr;
                   const prevHighlighted =
                     j > 0 &&
-                    (() => {
-                      const a = addr - 1;
-                      return (
-                        a === pcByte ||
-                        (a >= marByte && a < marByte + 4) ||
-                        (a >= spByte && a < spByte + 4) ||
-                        (a >= lvByte && a < lvByte + 4) ||
-                        (a >= cppByte && a < cppByte + 4) ||
-                        (a >= instrStart && a < instrEnd)
-                      );
-                    })();
+                    isHighlighted(addr - 1, pcByte, marByte, spByte, lvByte, cppByte, instrStart, instrEnd);
                   const nextHighlighted =
                     j < ROW_BYTES - 1 &&
-                    (() => {
-                      const a = addr + 1;
-                      return (
-                        a === pcByte ||
-                        (a >= marByte && a < marByte + 4) ||
-                        (a >= spByte && a < spByte + 4) ||
-                        (a >= lvByte && a < lvByte + 4) ||
-                        (a >= cppByte && a < cppByte + 4) ||
-                        (a >= instrStart && a < instrEnd)
-                      );
-                    })();
+                    isHighlighted(addr + 1, pcByte, marByte, spByte, lvByte, cppByte, instrStart, instrEnd);
+
+                  // When several registers point at this byte, render the
+                  // cell background as a hard-stop horizontal stripe
+                  // gradient — one stripe per register's color, equal
+                  // widths. The user sees every contributing color side
+                  // by side, instead of a priority-mixed single hue.
+                  let bgStyle: React.CSSProperties | undefined;
+                  if (colors.length === 1) {
+                    bgStyle = {
+                      background: `color-mix(in srgb, ${colors[0]} 55%, transparent)`,
+                    };
+                  } else if (colors.length > 1) {
+                    const stops = colors
+                      .map((c, i) => {
+                        const a = ((i / colors.length) * 100).toFixed(2);
+                        const b = (((i + 1) / colors.length) * 100).toFixed(2);
+                        return `color-mix(in srgb, ${c} 55%, transparent) ${a}% ${b}%`;
+                      })
+                      .join(', ');
+                    bgStyle = { background: `linear-gradient(90deg, ${stops})` };
+                  }
 
                   const cellClass = [
                     styles.byteCol,
-                    tags.includes('CPP') && styles.cppByte,
-                    tags.includes('LV') && styles.lvByte,
-                    tags.includes('PC instr') && styles.pcRange,
-                    tags.includes('SP') && styles.spByte,
-                    tags.includes('MAR') && styles.marByte,
-                    tags.includes('PC') && styles.pcByte,
+                    inInstr && colors.length === 0 && styles.pcRangeCell,
                     highlighted && !prevHighlighted && styles.runStart,
                     highlighted && !nextHighlighted && styles.runEnd,
                   ]
@@ -236,6 +268,7 @@ export function MemoryView(): JSX.Element {
                     <span
                       key={j}
                       className={cellClass}
+                      style={bgStyle}
                       title={tags.length > 0 ? tags.join(' / ') : undefined}
                     >
                       {fmtHex(byte, 2)}

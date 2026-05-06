@@ -24,6 +24,18 @@ function fmtHex8(n: number): string {
   return '0x' + ((n & 0xff).toString(16).padStart(2, '0').toUpperCase());
 }
 
+// Registers that get a per-name accent color so they're visually linked to
+// their counterparts in the data path, memory view, and stack view. Other
+// registers (MDR/MBR/OPC/H) aren't memory-associated and stay neutral.
+const REG_COLOR_VAR: Partial<Record<RegisterName, string>> = {
+  PC: 'var(--reg-pc)',
+  MAR: 'var(--reg-mar)',
+  SP: 'var(--reg-sp)',
+  LV: 'var(--reg-lv)',
+  CPP: 'var(--reg-cpp)',
+  TOS: 'var(--reg-tos)',
+};
+
 export function RegisterPanel(): JSX.Element {
   const machine = useAppStore((s) => s.machine);
   const lastTrace = useAppStore((s) => s.lastTrace);
@@ -76,7 +88,12 @@ export function RegisterPanel(): JSX.Element {
               const isMbr = name === 'MBR';
               return (
                 <tr key={name} className={flash ? styles.flash : undefined}>
-                  <td className={styles.regName}>{name}</td>
+                  <td
+                    className={styles.regName}
+                    style={REG_COLOR_VAR[name] ? { color: REG_COLOR_VAR[name] } : undefined}
+                  >
+                    {name}
+                  </td>
                   <td className={`mono ${styles.regHex}`}>
                     {isMbr ? fmtHex8(value) : fmtHex32(value)}
                   </td>

@@ -10,32 +10,17 @@ function fmtByteAddr(addr: number): string {
   return addr.toString(16).toUpperCase().padStart(4, '0');
 }
 
-/**
- * Map an IJVM byte address to the µaddress where Main1 dispatches its
- * handler — i.e. the opcode value itself. We use this so a breakpoint set
- * in the IJVM editor's gutter triggers when the µprogram dispatches that
- * opcode (the natural "stop here" point for an IJVM-level breakpoint).
- *
- * Returns `null` when the byte at `addr` isn't a known opcode (e.g. it's
- * an operand byte) — in which case clicking does nothing.
- */
-function ijvmAddressToBreakpointMpc(
-  addr: number,
-  bytes: Uint8Array,
-): number | null {
-  if (addr < 0 || addr >= bytes.length) return null;
-  // The handler entry sits at MPC = opcode byte.
-  const opcode = bytes[addr];
-  if (opcode === undefined) return null;
-  return opcode;
-}
-
 export function MacrocodeEditor(): JSX.Element {
   const macrocode = useAppStore((s) => s.macrocode);
   const setMacrocode = useAppStore((s) => s.setMacrocode);
   const ijvmAssembly = useAppStore((s) => s.ijvmAssembly);
-  const breakpoints = useAppStore((s) => s.breakpoints);
-  const toggleBreakpoint = useAppStore((s) => s.toggleBreakpoint);
+  // Macro-code breakpoints are byte-address-specific: hitting one pauses
+  // execution only when Main1 dispatches the IJVM instruction at *this*
+  // call site, not at every other instance of the same opcode in the
+  // program. (Use the microcode editor's gutter for "stop at every X
+  // dispatch" — a µ-breakpoint on the opcode handler does that.)
+  const macroBreakpoints = useAppStore((s) => s.macroBreakpoints);
+  const toggleMacroBreakpoint = useAppStore((s) => s.toggleMacroBreakpoint);
   // Highlight the IJVM instruction whose handler is currently active. This is
   // pinned at the address of the last opcode dispatched by Main1 — using
   // `machine.PC` directly would mis-highlight mid-handler when PC walks past
@@ -113,15 +98,14 @@ export function MacrocodeEditor(): JSX.Element {
     if (codeJump) editor.revealLineInCenterIfOutsideViewport(line);
   }, [currentPc, ijvmAssembly, codeJump]);
 
-  // Render breakpoint glyphs for any IJVM line whose opcode-dispatch
-  // µaddress currently has a breakpoint.
+  // Render breakpoint glyphs for any IJVM line whose byte address is in
+  // the macro-breakpoint set.
   useEffect(() => {
     const decorations = bpDecorationsRef.current;
     if (!decorations || !ijvmAssembly) return;
     const items: editor.IModelDeltaDecoration[] = [];
     for (const [line, byteAddr] of ijvmAssembly.addressByLine) {
-      const mpc = ijvmAddressToBreakpointMpc(byteAddr, ijvmAssembly.bytes);
-      if (mpc === null || !breakpoints.has(mpc)) continue;
+      if (!macroBreakpoints.has(byteAddr)) continue;
       items.push({
         range: {
           startLineNumber: line,
@@ -133,13 +117,13 @@ export function MacrocodeEditor(): JSX.Element {
           isWholeLine: false,
           glyphMarginClassName: 'mic1-bp-glyph',
           glyphMarginHoverMessage: {
-            value: `Breakpoint on opcode dispatch (µaddress 0x${mpc.toString(16).toUpperCase().padStart(3, '0')})`,
+            value: `Breakpoint at byte 0x${fmtByteAddr(byteAddr)} — pauses only at this call site`,
           },
         },
       });
     }
     decorations.set(items);
-  }, [breakpoints, ijvmAssembly]);
+  }, [macroBreakpoints, ijvmAssembly]);
 
   const handleMount: React.ComponentProps<typeof Editor>['onMount'] = (ed, monaco) => {
     editorRef.current = ed;
@@ -161,9 +145,7 @@ export function MacrocodeEditor(): JSX.Element {
       if (!ija) return;
       const byteAddr = ija.addressByLine.get(lineNumber);
       if (byteAddr === undefined) return;
-      const mpc = ijvmAddressToBreakpointMpc(byteAddr, ija.bytes);
-      if (mpc === null) return;
-      toggleBreakpoint(mpc);
+      toggleMacroBreakpoint(byteAddr);
     });
   };
 

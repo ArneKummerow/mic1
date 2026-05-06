@@ -105,6 +105,17 @@ function fmtVal(n: number, name: RegisterName): string {
   return '0x' + ((n >>> 0) & 0xffffffff).toString(16).padStart(8, '0').toUpperCase();
 }
 
+// Per-register accent for the name label. Mirrors RegisterPanel /
+// MemoryView so e.g. SP reads as the same orange in every panel.
+const REG_COLOR_VAR: Partial<Record<RegisterName, string>> = {
+  PC: 'var(--reg-pc)',
+  MAR: 'var(--reg-mar)',
+  SP: 'var(--reg-sp)',
+  LV: 'var(--reg-lv)',
+  CPP: 'var(--reg-cpp)',
+  TOS: 'var(--reg-tos)',
+};
+
 /**
  * Border + background colors for the MEM box, derived from which memory
  * operations are firing this cycle. With multiple ops active, mixes the
@@ -256,7 +267,12 @@ export function DataPathView(): JSX.Element {
                   rx={3}
                   className={`${styles.reg} ${isWritten ? styles.regWritten : ''} ${isBSource || isAH ? styles.regRead : ''}`}
                 />
-                <text x={REG_X + 12} y={cy} className={styles.regName}>
+                <text
+                  x={REG_X + 12}
+                  y={cy}
+                  className={styles.regName}
+                  style={REG_COLOR_VAR[name] ? { fill: REG_COLOR_VAR[name] } : undefined}
+                >
                   {name}
                 </text>
                 <text x={REG_X + REG_W - 8} y={cy} className={styles.regValue}>
